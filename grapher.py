@@ -1,8 +1,8 @@
 import matplotlib.pyplot as plt
 
-linestyles = {'SGD': '-', 'SNGD': ':', 'DSNGD': '-.', 'MAP': '-.', 'AdaGrad': '-'}
+linestyles = {'SGD': '-', 'SNGD': ':', 'DSNGD': '-.', 'MAP': '-.', 'adaGrad': ':'}
 
-color = {'SGD': 'C1', 'SNGD': 'C4', 'DSNGD': 'C2', 'MAP': 'C3', 'AdaGrad': 'C5'}
+color = {'SGD': 'C1', 'SNGD': 'C4', 'DSNGD': 'C2', 'MAP': 'C3', 'adaGrad': 'C5'}
 
 
 def plot_lines(x, graphs, labels, x_labels=False, y_labels=False, low_lines=None, high_lines=None, file_name=''):

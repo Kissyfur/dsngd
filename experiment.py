@@ -69,7 +69,7 @@ def experiment(problem, algs, n, many_experiments=2, epochs=1, batch=1, extremal
             # fn = ''
             err = optimize_function(alg, data, file_name=fn)
             print(np.min(err), optimum)
-            best = np.min([np.min(err), optimum])
+            best = np.min([np.min(err), optimum[0]])
             m_vals[alg.key].append(err - best)
     return m_vals
 
@@ -94,11 +94,11 @@ def graph_3_dims_3_entropies(sample_length, many_experiments=100, epochs=1, batc
         classi = classification.ClassificationProblem(dim)
         y_labels.append(str(classi.cp.dimension - 1) + '      ')
         SGD = sgd.SGD(gradient=classi.direction['sgd'])
-        # adagrad = adaGrad.AdaGrad(gradient=classi.direction['sgd'])
+        adagrad = adaGrad.AdaGrad(gradient=classi.direction['sgd'])
         # Adadelta = adadelta.Adadelta(gradient=classi.direction['sgd'])
         DSNGD = dsngd.DSNGD(classi.direction['dsngd'], classi.dual_estimator['dsngd'])
         # dsngd2 = dsngd2.DSNGD2(classi.direction['dsngd2'], classi.dual_estimator['dsngd'])
-        algs = [SGD, DSNGD]
+        algs = [SGD, DSNGD, adagrad]
         for j in range(len(extremalities)):
             extremality = extremalities[j]
             e = experiment(classi, algs, n=sample_length, many_experiments=many_experiments,
@@ -203,6 +203,6 @@ if __name__ == "__main__":
     # dsngd = dsngd.DSNGD(classi.direction['dsngd'], classi.dual_estimator['dsngd'])
     # dsngd2 = dsngd2.DSNGD2(classi.direction['dsngd2'], classi.dual_estimator['dsngd'])
     # algs = [sgd, dsngd]
-    graph_3_dims_3_entropies(sample_length=10000000, many_experiments=100, epochs=1, batch=500)
+    graph_3_dims_3_entropies(sample_length=10000000, many_experiments=1, epochs=1, batch=500)
 
     # test_kl_and_fast_kl()

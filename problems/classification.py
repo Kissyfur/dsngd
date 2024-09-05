@@ -27,7 +27,7 @@ class CanonicalParametrization(object):
         self.xd_dimension = int(np.sum(self.xd_values)) - self.many_xd
         self.x_dimension = self.xd_dimension + self.xg_dimension + 1
         self.y_dimension = self.y_values
-        self.many_x = np.product(self.xd_values)
+        self.many_x = np.prod(self.xd_values)
 
         self.dimension = self.y_dimension * self.x_dimension
 
