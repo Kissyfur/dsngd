@@ -12,32 +12,55 @@ class AdaGrad(SGD):
         self.batch = batch
 
     def adagrad(self, data, progress_bar=False):
-        sample = data['sample']
+        sample = data["sample"]
         lr = data["lr"]
-        current_parameter = data['start'].copy()
-        epochs = data['epochs']
 
-        n = len(sample)
-        self.set_run(n, epochs)
+        total_iter = data['total iterations']
+        self.set_run(total_iter)
         parameters = []
         Gt = 0
-        sample_indexes = np.arange(n)
-        for e in range(epochs):
-            it = np.arange(self.iter_per_epoch)
-            if progress_bar:
-                it = self.tqdm(it)
-            for i in it:
-                indexes = sample_indexes[i * self.batch:(i + 1) * self.batch]
-                # obs = sample[i * self.batch:(i + 1) * self.batch]
-                obs = sample[indexes]
-                it = e * self.iter_per_epoch + i
-                if self.save_current_parameter(it):
-                    parameters.append(current_parameter.copy())
-                g = self.direction(obs, current_parameter)
-                Gt += g*g
+        current_parameter = data["start"].copy()
+        if progress_bar:
+            sample = self.tqdm(sample, total=total_iter)
+        i = 0
+        for obs in sample:
+            if self.save_current_parameter(i):
+                parameters.append(current_parameter.copy())
+            g = self.direction(obs, current_parameter)
+            Gt += g * g
 
-                r = self.learning_rate(Gt, lr)
-                current_parameter -= r * g
-            np.random.shuffle(sample_indexes)
+            r = self.learning_rate(Gt, lr)
+            current_parameter -= r * g
+            i = i + 1
         parameters.append(current_parameter.copy())
         return np.array(parameters)
+
+        # sample = data['sample']
+        # lr = data["lr"]
+        # current_parameter = data['start'].copy()
+        # epochs = data['epochs']
+        #
+        # n = len(sample)
+        # self.set_run(n, epochs)
+        # parameters = []
+        # Gt = 0
+        # sample_indexes = np.arange(n)
+        # for e in range(epochs):
+        #     it = np.arange(self.iter_per_epoch)
+        #     if progress_bar:
+        #         it = self.tqdm(it)
+        #     for i in it:
+        #         indexes = sample_indexes[i * self.batch:(i + 1) * self.batch]
+        #         # obs = sample[i * self.batch:(i + 1) * self.batch]
+        #         obs = sample[indexes]
+        #         it = e * self.iter_per_epoch + i
+        #         if self.save_current_parameter(it):
+        #             parameters.append(current_parameter.copy())
+        #         g = self.direction(obs, current_parameter)
+        #         Gt += g*g
+        #
+        #         r = self.learning_rate(Gt, lr)
+        #         current_parameter -= r * g
+        #     np.random.shuffle(sample_indexes)
+        # parameters.append(current_parameter.copy())
+        # return np.array(parameters)
