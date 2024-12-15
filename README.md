@@ -33,3 +33,5 @@ batch = 250  # Batch of sample fed to algorithm per iteration
 sample_length = 100000  # Length of the sample
 epochs = 1  # Repetitions of the sample
 ```
+
+![alt text](9experiments.png "Experiment")
