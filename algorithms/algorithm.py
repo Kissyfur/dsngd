@@ -54,10 +54,10 @@ class Algorithm(object):
                 # print("lr: ", lr)
                 err = run_algorithm_and_evaluate_in_f(lr)
                 # print("error: ", err)
-                if err < best_err:
+                if np.isnan(best_err) or err < best_err:
                     best_lr = lr
                     best_err = err
-            except (OverflowError, np.linalg.linalg.LinAlgError, FloatingPointError):
+            except (OverflowError, np.linalg.LinAlgError, FloatingPointError):
                 pass
         print("Best lr for", self.key, "is ", best_lr, "with error: ", best_err)
         # if best_lr[0] == 10. ** a_exps[0]:

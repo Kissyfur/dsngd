@@ -227,6 +227,25 @@ class ClassificationProblem:
         self.dual_start = {'dsngd': self.dual_starting_parameter}
         self.dual_estimator = {'dsngd': mAp.MAP(self)}
 
+    def to_dual(self, param):
+
+        dual_parameter = np.zeros((self.cp.y_dimension, self.cp.x_dimension))
+
+        tx = self.cp.t_x(self.cp.all_x)
+
+        log_numerators = self.cp.compute_log_numerators(tx, np.array([param]))[0]
+
+        log_denominator = logsumexp(log_numerators)
+        pyx = np.exp(log_numerators - log_denominator)
+
+        dual_parameter[:, 0] = np.sum(pyx, axis=1)
+        masks = np.identity(self.cp.x_dimension)
+
+        for i,mask in enumerate(masks):
+            tx_masked = np.sum(tx * mask, axis=1, dtype=bool)
+            dual_parameter[:, i] = np.sum(pyx[:, tx_masked], axis=1)
+        return dual_parameter
+
     def set_problem(self, sigma, seed):
         dim = (1, self.cp.y_dimension, self.cp.x_dimension)
         np.random.seed(seed)
@@ -509,7 +528,7 @@ class ClassificationProblem:
         return np.zeros((self.cp.y_dimension, self.cp.x_dimension))
 
     def max_entropy_dual_parameter(self):
-        psi = self.cp.dimension 
+        psi = self.cp.dimension
         dual_p = np.ones((self.cp.y_dimension, self.cp.x_dimension)) * psi / self.y_values
         start = 1
         for i in range(self.cp.many_xd):

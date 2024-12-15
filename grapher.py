@@ -1,13 +1,13 @@
 import matplotlib.pyplot as plt
 
-linestyles = {'SGD': '-', 'SNGD': ':', 'DSNGD': '-.', 'MAP': '-.', 'adaGrad': ':'}
+linestyles = {'SGD': '-', 'SNGD': ':', 'DSNGD': '--', 'MAP': '-.', 'adaGrad': '-.'}
 
-color = {'SGD': 'C1', 'SNGD': 'C4', 'DSNGD': 'C2', 'MAP': 'C3', 'adaGrad': 'C5'}
+color = {'SGD': 'C1', 'SNGD': 'C3', 'DSNGD': 'C2', 'MAP': 'C3', 'adaGrad': 'C5'}
 
 
 def plot_lines(x, graphs, labels, x_labels=False, y_labels=False, low_lines=None, high_lines=None, file_name=''):
-    rows = graphs.shape[0]
-    columns = graphs.shape[1]
+    rows = len(graphs)
+    columns = len(graphs[0])
     grid_num = rows*100 + columns*10 + 1
     # plt.figure(figsize=(14, 3.9))
     for row in range(rows):
@@ -23,7 +23,7 @@ def plot_lines(x, graphs, labels, x_labels=False, y_labels=False, low_lines=None
             elif x_labels:
                 plt.xlabel(x_labels[col])
 
-            lines = graphs[row, col]
+            lines = graphs[row][col]
             # convert y-axis to Logarithmic scale
             # plt.yscale("log")
             # convert y-axis to Logarithmic scale
@@ -31,8 +31,8 @@ def plot_lines(x, graphs, labels, x_labels=False, y_labels=False, low_lines=None
             # plt.xlim(10e3, 10e6)
             for l in range(len(lines)):
                 line = lines[l]
-                l_line = low_lines[row, col][l]
-                h_line = high_lines[row, col][l]
+                l_line = low_lines[row][col][l]
+                h_line = high_lines[row][col][l]
                 name = labels[l]
                 if (line > 0).all():
                     plt.semilogy()

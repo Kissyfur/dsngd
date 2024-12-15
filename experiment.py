@@ -11,6 +11,7 @@ from algorithms import dsngd
 from algorithms import dsngd2
 from algorithms import adaGrad
 from algorithms import adadelta
+from algorithms import sngd
 
 # matplotlib.use('TkAgg')
 
@@ -26,6 +27,7 @@ else:
 
 
 def experiment(problem, algs, n, many_experiments=2, epochs=1, batch=1, extremality=1.):
+    start_exp = 0
     sample_from_real_parameter = True
     lr_iterations = 500
     data = {'start': problem.start['sgd'], 'dual_start': problem.dual_start['dsngd'],
@@ -34,6 +36,7 @@ def experiment(problem, algs, n, many_experiments=2, epochs=1, batch=1, extremal
     for alg in algs:
         m_vals[alg.key] = []
     for i in range(many_experiments):
+        i += start_exp
         real_parameter = problem.set_problem(extremality, seed=i)
         print("\nExperiment num: ", i, ". Real beta has dim:", problem.cp.dimension)
 
@@ -80,41 +83,44 @@ def graph_3_dims_3_entropies(sample_length, many_experiments=100, epochs=1, batc
     var3 = {'Y': 30, 'X': {'discrete': [10, 5, 10, 5, 10, 5], 'gaussian': 0}}
     dims = [var1, var2, var3]
 
-    extremalities = [0.1, 0.5, 1.]
+    extremalities = [0.1, 0.7, 1.]
     medians = [[0,0,0],[0,0,0],[0,0,0]]
     first_quartile = [[0,0,0],[0,0,0],[0,0,0]]
     third_quartile = [[0,0,0],[0,0,0],[0,0,0]]
 
-    x_labels = ['High entropy', 'Medium entropy', 'Low entropy']
+    x_labels = ['Sample\n\nHigh entropy', 'Sample\n\nMedium entropy', 'Sample\n\nLow entropy']
     labels = []
     y_labels = []
     n_dots = 1
     for i in range(len(dims)):
         dim = dims[i]
         classi = classification.ClassificationProblem(dim)
-        y_labels.append(str(classi.cp.dimension - 1) + '      ')
+        y_labels.append('Dim:' +str(classi.cp.dimension - 1) + '                 \n\nKl-divergence                    ')
         SGD = sgd.SGD(gradient=classi.direction['sgd'])
         adagrad = adaGrad.AdaGrad(gradient=classi.direction['sgd'])
         # Adadelta = adadelta.Adadelta(gradient=classi.direction['sgd'])
         DSNGD = dsngd.DSNGD(classi.direction['dsngd'], classi.dual_estimator['dsngd'])
+        SNGD = sngd.SNGD(classi.direction['dsngd'], classi.to_dual)
         # dsngd2 = dsngd2.DSNGD2(classi.direction['dsngd2'], classi.dual_estimator['dsngd'])
-        algs = [SGD, DSNGD, adagrad]
+        algs = [SGD, DSNGD, adagrad, SNGD]
+        labels = [SGD.key, DSNGD.key, adagrad.key, SNGD.key]
+        if i == 2:
+            algs = [SGD, DSNGD, adagrad]
         for j in range(len(extremalities)):
+
             extremality = extremalities[j]
             e = experiment(classi, algs, n=sample_length, many_experiments=many_experiments,
                            epochs=epochs, batch=batch, extremality=extremality)
             lines = []
-            labels = []
             for key in e:
-                labels.append(key)
                 lines.append(e[key])
             medians[i][j] = np.median(lines, axis=1)
             first_quartile[i][j] = np.percentile(lines, 75, axis=1)
             third_quartile[i][j] = np.percentile(lines, 25, axis=1)
             n_dots = len(medians[i][j][0])
-    medians = np.array(medians)
-    first_quartile = np.array(first_quartile)
-    third_quartile = np.array(third_quartile)
+    # medians = np.array(medians)
+    # first_quartile = np.array(first_quartile)
+    # third_quartile = np.array(third_quartile)
     x = np.arange(n_dots) * sample_length // n_dots
 
     file_name = '9experiments'
@@ -203,6 +209,6 @@ if __name__ == "__main__":
     # dsngd = dsngd.DSNGD(classi.direction['dsngd'], classi.dual_estimator['dsngd'])
     # dsngd2 = dsngd2.DSNGD2(classi.direction['dsngd2'], classi.dual_estimator['dsngd'])
     # algs = [sgd, dsngd]
-    graph_3_dims_3_entropies(sample_length=10000000, many_experiments=1, epochs=1, batch=500)
+    graph_3_dims_3_entropies(sample_length=10000000, many_experiments=10, epochs=1, batch=250)
 
     # test_kl_and_fast_kl()
