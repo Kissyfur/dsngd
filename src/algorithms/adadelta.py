@@ -1,4 +1,4 @@
-from algorithms.adaGrad import AdaGrad
+from src.algorithms.adaGrad import AdaGrad
 import numpy as np
 
 
@@ -10,6 +10,14 @@ class Adadelta(AdaGrad):
         self.run_algorithm = self.adadelta
         self.learning_rate = self.adadelta_learning_rate
         self.batch = batch
+
+    @staticmethod
+    def adadelta_learning_rate(E_gti, E_updates):
+        fudge_factor = 1e-8
+        RMS_gti = np.sqrt(fudge_factor + E_gti)
+        RMS_updates = np.sqrt(fudge_factor + E_updates)
+        return RMS_updates / RMS_gti
+
 
     def adadelta(self, data, epochs, alpha=0.9, progress_bar=False):
         sample = data["sample"]
