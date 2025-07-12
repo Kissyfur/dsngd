@@ -110,13 +110,12 @@ class JointMLR:
             lrs = list(itertools.product(exp))
             best_lr = 1.
 
-        param = (self.alpha.copy(), self.beta.copy())
-        etas = optimizer.run(sample, starting_point=param, lr=best_lr, iter_keep=1000)
+        etas = optimizer.run(sample, starting_point=(self.alpha.copy(), self.beta.copy()), lr=best_lr, iter_keep=1000)
         best_err = np.sum(self.compute_metrics(true_model, etas[-5:]))
 
         for lr in tqdm(lrs, desc="Learning rate search..."):
             try:
-                etas = optimizer.run(sample, starting_point=param, lr=lr, iter_keep=1000)
+                etas = optimizer.run(sample, starting_point=(self.alpha.copy(), self.beta.copy()), lr=lr, iter_keep=1000)
                 err = np.sum(self.compute_metrics(true_model, etas[-5:]))
                 # logging.info(f"Learning rate: {lr} with error: {err} ")
 
@@ -145,9 +144,9 @@ class JointMLR:
         all_x = np.array(list(self.compute_all_x()))
         log_pred = self.log_conditional_probabilities(all_x, estimations)
         log_true_model = self.log_conditional_probabilities(all_x, [true_model.eta])
-        kl = self.relative_entropy(true_pyx, log_true_model) - self.relative_entropy(true_pyx, log_pred)
-        # kl = self.relative_entropy(true_pyx, log_pred)
-        return -kl
+        # kl = self.relative_entropy(true_pyx, log_true_model) - self.relative_entropy(true_pyx, log_pred)
+        kl = self.relative_entropy(true_pyx, log_pred)
+        return kl
 
     def compute_history_metrics(self, true_model):
         etas = self.history['etas']
