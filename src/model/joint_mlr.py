@@ -110,12 +110,12 @@ class JointMLR:
             lrs = list(itertools.product(exp))
             best_lr = 1.
 
-        etas = optimizer.run(sample, starting_point=(self.alpha.copy(), self.beta.copy()), lr=best_lr, iter_keep=1000)
+        etas = optimizer.run(sample, starting_point=(self.alpha.copy(), self.beta.copy()), lr=best_lr, iter_keep=100)
         best_err = np.sum(self.compute_metrics(true_model, etas[-5:]))
 
         for lr in tqdm(lrs, desc="Learning rate search..."):
             try:
-                etas = optimizer.run(sample, starting_point=(self.alpha.copy(), self.beta.copy()), lr=lr, iter_keep=1000)
+                etas = optimizer.run(sample, starting_point=(self.alpha.copy(), self.beta.copy()), lr=lr, iter_keep=100)
                 err = np.sum(self.compute_metrics(true_model, etas[-5:]))
                 # logging.info(f"Learning rate: {lr} with error: {err} ")
 
