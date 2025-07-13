@@ -143,9 +143,9 @@ class JointMLR:
         true_pyx = true_model.pyx
         all_x = np.array(list(self.compute_all_x()))
         log_pred = self.log_conditional_probabilities(all_x, estimations)
-        # log_true_model = self.log_conditional_probabilities(all_x, [true_model.eta])
-        # kl = self.relative_entropy(true_pyx, log_true_model) - self.relative_entropy(true_pyx, log_pred)
-        kl = self.relative_entropy(true_pyx, log_pred)
+        log_true_model = self.log_conditional_probabilities(all_x, [true_model.eta])
+        kl = self.relative_entropy(true_pyx, log_pred) - self.relative_entropy(true_pyx, log_true_model)
+        # kl = self.relative_entropy(true_pyx, log_pred)
         return kl
 
     def compute_history_metrics(self, true_model):

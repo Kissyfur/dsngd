@@ -14,7 +14,7 @@ algorithms for machine learning_
 Clone the project, access to the directory in your command line and 
 execute the _experiment.py_ coding file:
 ```bash
-python3 experiment.py
+python3 bin/experiment.py
 ```
 ### Set up a new experiment
 For a custom experiment with different settings open the _experiemnt.py_ file
