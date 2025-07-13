@@ -1,4 +1,4 @@
-from algorithms.dsngd import DSNGD
+from src.algorithms.dsngd import DSNGD
 
 
 class DSNGD2(DSNGD):

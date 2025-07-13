@@ -5,6 +5,7 @@ linestyles = {'SGD': '-', 'SNGD': ':', 'DSNGD': '--', 'MAP': '-.', 'adaGrad': '-
 color = {'SGD': 'C1', 'SNGD': 'C3', 'DSNGD': 'C2', 'MAP': 'C3', 'adaGrad': 'C5'}
 
 
+
 def plot_lines(x, graphs, labels, x_labels=False, y_labels=False, low_lines=None, high_lines=None, file_name=''):
     rows = len(graphs)
     columns = len(graphs[0])

@@ -1,5 +1,5 @@
 import numpy as np
-from algorithms.algorithm import Algorithm
+from src.algorithms.algorithm import Algorithm
 
 
 # Discrete case

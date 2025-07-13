@@ -13,7 +13,7 @@ algorithms for machine learning_ and the research paper named _Dual Stockastic N
 Clone the project and access the directory. Install packages appearing in requirements.txt. Finally,
 execute _experiment.py_ coding file:
 ```bash
-python3 experiment.py
+python3 bin/experiment.py
 ```
 ### Set up a new experiment
 For a custom experiment with different settings open the _experiemnt.py_ file
