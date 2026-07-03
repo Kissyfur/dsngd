@@ -3,6 +3,7 @@ import unittest
 import numpy as np
 
 from src.algorithms.dsngd_ef import DSNGD_NaiveBayesEF
+from src.data.ef_sample_creator import NaiveBayesEFSampleIterator
 from src.families import CategoricalCoordinate, GaussianKnownVarianceCoordinate
 from src.model.naive_bayes_ef import NaiveBayesEF
 
@@ -73,6 +74,53 @@ class ContinuousEFIntegrationTests(unittest.TestCase):
             np.linalg.norm(final_alpha) + sum(np.linalg.norm(block) for block in final_beta_blocks),
             0.0,
         )
+
+    def test_mixed_sampler_returns_valid_batches(self):
+        model = NaiveBayesEF(
+            2,
+            [
+                CategoricalCoordinate(3),
+                GaussianKnownVarianceCoordinate(variance=1.0),
+            ],
+        )
+        sample = NaiveBayesEFSampleIterator(model, epoch_length=7, epochs=1, batch=4, random_seed=12)
+
+        batches = list(sample)
+
+        self.assertEqual(len(sample), 2)
+        self.assertEqual(batches[0][0].shape, (4, 2))
+        self.assertEqual(batches[1][0].shape, (3, 2))
+        x = np.vstack([batch_x for batch_x, _ in batches])
+        y = np.concatenate([batch_y for _, batch_y in batches])
+        self.assertTrue(np.all((0 <= x[:, 0]) & (x[:, 0] < 3)))
+        self.assertTrue(np.all(np.equal(np.mod(x[:, 0], 1.0), 0.0)))
+        self.assertTrue(np.all((0 <= y) & (y < model.many_classes)))
+
+    def test_generic_dsngd_can_run_on_synthetic_mixed_sample(self):
+        true_model = NaiveBayesEF(
+            2,
+            [
+                CategoricalCoordinate(2),
+                GaussianKnownVarianceCoordinate(variance=1.0),
+            ],
+        )
+        true_model.set_eta((np.array([0.1]), [np.array([[0.3, -0.1]]), np.array([[-0.5, 0.5]])]))
+        fit_model = NaiveBayesEF(
+            2,
+            [
+                CategoricalCoordinate(2),
+                GaussianKnownVarianceCoordinate(variance=1.0),
+            ],
+        )
+        optimizer = DSNGD_NaiveBayesEF(fit_model)
+        sample = NaiveBayesEFSampleIterator(true_model, epoch_length=12, epochs=1, batch=4, random_seed=9)
+
+        etas = optimizer.run(sample, fit_model.eta, lr=[0.005, 0.0], iter_keep=2)
+
+        final_alpha, final_beta_blocks = etas[-1]
+        self.assertTrue(np.all(np.isfinite(final_alpha)))
+        for block in final_beta_blocks:
+            self.assertTrue(np.all(np.isfinite(block)))
 
 
 if __name__ == "__main__":
