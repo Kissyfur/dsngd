@@ -35,3 +35,31 @@ epochs = 1  # Repetitions of the sample
 ```
 
 ![alt text](9experiments.png "Experiment")
+
+### Continuous and mixed exponential-family features
+
+The `continuous_dsngd` branch adds a generic Naive Bayes exponential-family path
+alongside the original discrete `JointMLR` implementation. The new path is built
+around one abstraction per feature coordinate:
+
+- `src.families.CategoricalCoordinate`
+- `src.families.GaussianKnownVarianceCoordinate`
+- `src.families.PoissonCoordinate`
+- `src.families.ExponentialMeanCoordinate`
+
+These families implement the expectation-coordinate score
+`grad_theta_star log f(x; theta_star)`, which is the only family-specific term
+needed by the generic DSNGD direction under the Naive Bayes assumption.
+
+Core pieces:
+
+- `src.model.NaiveBayesEF`: generic model for heterogeneous feature coordinates.
+- `src.algorithms.dsngd_ef.DSNGD_NaiveBayesEF`: generic DSNGD direction/update.
+- `src.data.ef_sample_creator.NaiveBayesEFSampleIterator`: synthetic sampler for
+  categorical, continuous, and mixed feature vectors.
+
+Run the smoke tests with:
+
+```bash
+python -m unittest discover -s tests
+```
