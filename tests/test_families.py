@@ -2,7 +2,12 @@ import unittest
 
 import numpy as np
 
-from src.families import CategoricalCoordinate, GaussianKnownVarianceCoordinate, PoissonCoordinate
+from src.families import (
+    CategoricalCoordinate,
+    ExponentialMeanCoordinate,
+    GaussianKnownVarianceCoordinate,
+    PoissonCoordinate,
+)
 
 
 class CategoricalCoordinateTests(unittest.TestCase):
@@ -104,6 +109,42 @@ class PoissonCoordinateTests(unittest.TestCase):
 
         def log_density_at(rate):
             return family.log_density(x, family.natural_from_expectation(np.array([rate])))
+
+        numerical = (log_density_at(expectation[0] + epsilon) - log_density_at(expectation[0] - epsilon)) / (
+            2.0 * epsilon
+        )
+
+        np.testing.assert_allclose(family.dual_score(x, expectation), np.array([numerical]), rtol=1e-6)
+
+
+class ExponentialMeanCoordinateTests(unittest.TestCase):
+    def test_natural_and_expectation_coordinates_round_trip(self):
+        family = ExponentialMeanCoordinate()
+        expectation = np.array([2.5])
+
+        natural = family.natural_from_expectation(expectation)
+        recovered = family.expectation_from_natural(natural)
+
+        np.testing.assert_allclose(recovered, expectation)
+
+    def test_log_density_matches_exponential_formula(self):
+        family = ExponentialMeanCoordinate()
+        expectation = np.array([2.0])
+        natural = family.natural_from_expectation(expectation)
+
+        log_density = family.log_density(np.array([0.0, 2.0, 4.0]), natural)
+        expected = -np.log(2.0) - np.array([0.0, 2.0, 4.0]) / 2.0
+
+        np.testing.assert_allclose(log_density, expected)
+
+    def test_dual_score_matches_finite_difference(self):
+        family = ExponentialMeanCoordinate()
+        x = 3.0
+        expectation = np.array([2.0])
+        epsilon = 1e-6
+
+        def log_density_at(mean):
+            return family.log_density(x, family.natural_from_expectation(np.array([mean])))
 
         numerical = (log_density_at(expectation[0] + epsilon) - log_density_at(expectation[0] - epsilon)) / (
             2.0 * epsilon

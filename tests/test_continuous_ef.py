@@ -4,7 +4,7 @@ import numpy as np
 
 from src.algorithms.dsngd_ef import DSNGD_NaiveBayesEF
 from src.data.ef_sample_creator import NaiveBayesEFSampleIterator
-from src.families import CategoricalCoordinate, GaussianKnownVarianceCoordinate
+from src.families import CategoricalCoordinate, ExponentialMeanCoordinate, GaussianKnownVarianceCoordinate
 from src.model.naive_bayes_ef import NaiveBayesEF
 
 
@@ -121,6 +121,19 @@ class ContinuousEFIntegrationTests(unittest.TestCase):
         self.assertTrue(np.all(np.isfinite(final_alpha)))
         for block in final_beta_blocks:
             self.assertTrue(np.all(np.isfinite(block)))
+
+    def test_exponential_coordinate_runs_through_generic_sampler_and_dsngd(self):
+        true_model = NaiveBayesEF(2, [ExponentialMeanCoordinate()])
+        true_model.set_eta((np.array([0.0]), [np.array([[-1.0, -0.5]])]))
+        fit_model = NaiveBayesEF(2, [ExponentialMeanCoordinate()])
+        optimizer = DSNGD_NaiveBayesEF(fit_model)
+        sample = NaiveBayesEFSampleIterator(true_model, epoch_length=10, epochs=1, batch=5, random_seed=4)
+
+        etas = optimizer.run(sample, fit_model.eta, lr=[0.002, 0.0], iter_keep=2)
+
+        final_alpha, final_beta_blocks = etas[-1]
+        self.assertTrue(np.all(np.isfinite(final_alpha)))
+        self.assertTrue(np.all(np.isfinite(final_beta_blocks[0])))
 
 
 if __name__ == "__main__":
