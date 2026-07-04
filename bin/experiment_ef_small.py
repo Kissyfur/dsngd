@@ -1,4 +1,5 @@
 from pathlib import Path
+import itertools
 
 import matplotlib
 
@@ -81,14 +82,33 @@ def run_candidate(algorithm_class, true_model, lr, train_size, batch, train_seed
     return validation_curve(model, etas, x_val, y_val)
 
 
-def choose_best_run(algorithm_class, candidates, true_model, train_size, batch, train_seed, x_val, y_val):
+def learning_rate_grid():
+    values = np.power(10.0, np.arange(-4, 2))
+    return list(itertools.product(values, values))
+
+
+def choose_best_lr(algorithm_class, true_model, lr_size, batch, train_seed, x_val, y_val):
     best = None
-    for lr in candidates:
-        curve = run_candidate(algorithm_class, true_model, lr, train_size, batch, train_seed, x_val, y_val)
-        result = {"lr": lr, "curve": curve}
-        if best is None or curve[-1] < best["curve"][-1]:
+    for lr in learning_rate_grid():
+        try:
+            curve = run_candidate(algorithm_class, true_model, lr, lr_size, batch, train_seed, x_val, y_val)
+            score = float(np.sum(curve[-5:]))
+        except (FloatingPointError, OverflowError, ValueError):
+            continue
+        if not np.isfinite(score):
+            continue
+
+        result = {"lr": lr, "score": score}
+        if best is None or score < best["score"]:
             best = result
+    if best is None:
+        raise RuntimeError(f"no stable learning rate found for {algorithm_class.__name__}")
     return best
+
+
+def run_with_selected_lr(algorithm_class, selected_lr, true_model, train_size, batch, train_seed, x_val, y_val):
+    curve = run_candidate(algorithm_class, true_model, selected_lr, train_size, batch, train_seed, x_val, y_val)
+    return {"lr": selected_lr, "curve": curve}
 
 
 def save_curves(samples_seen, results, true_nll):
@@ -96,7 +116,8 @@ def save_curves(samples_seen, results, true_nll):
 
     plt.figure(figsize=(7, 4.2))
     for name, result in results.items():
-        plt.plot(samples_seen, result["curve"], label=f"{name} lr={result['lr'][0]:g}")
+        a, b = result["lr"]
+        plt.plot(samples_seen, result["curve"], label=f"{name} a={a:g}, b={b:g}")
     plt.axhline(true_nll, color="black", linestyle=":", label="true model")
     plt.xlabel("Samples seen")
     plt.ylabel("Validation negative log-likelihood")
@@ -109,9 +130,10 @@ def save_curves(samples_seen, results, true_nll):
     plt.figure(figsize=(7, 4.2))
     for name, result in results.items():
         excess = np.maximum(result["curve"] - true_nll, 1e-8)
-        plt.semilogy(samples_seen, excess, label=f"{name} lr={result['lr'][0]:g}")
+        a, b = result["lr"]
+        plt.semilogy(samples_seen, excess, label=f"{name} a={a:g}, b={b:g}")
     plt.xlabel("Samples seen")
-    plt.ylabel("Excess validation NLL over true model")
+    plt.ylabel("Validation NLL gap over true model (clipped)")
     plt.title("Convergence on validation loss")
     plt.legend()
     plt.tight_layout()
@@ -120,10 +142,11 @@ def save_curves(samples_seen, results, true_nll):
 
 
 def save_summary(samples_seen, results, true_nll):
-    lines = ["algorithm,learning_rate,initial_nll,final_nll,true_model_nll"]
+    lines = ["algorithm,learning_rate_a,learning_rate_b,initial_nll,final_nll,true_model_nll"]
     for name, result in results.items():
+        a, b = result["lr"]
         lines.append(
-            f"{name},{result['lr'][0]},{result['curve'][0]},{result['curve'][-1]},{true_nll}"
+            f"{name},{a},{b},{result['curve'][0]},{result['curve'][-1]},{true_nll}"
         )
     (OUTPUT_DIR / "summary.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
     curves = np.column_stack([samples_seen] + [result["curve"] for result in results.values()])
@@ -134,6 +157,7 @@ def save_summary(samples_seen, results, true_nll):
 def main():
     true_model = build_true_model()
     train_size = 3000
+    lr_size = 750
     validation_size = 3000
     batch = 50
     x_val, y_val = collect_sample(true_model, size=validation_size, batch=500, seed=123)
@@ -141,10 +165,31 @@ def main():
     n_steps = len(NaiveBayesEFSampleIterator(true_model, epoch_length=train_size, epochs=1, batch=batch, random_seed=1))
     samples_seen = np.concatenate([np.arange(n_steps) * batch, np.array([train_size])])
 
-    candidates = [(rate, 0.0) for rate in [0.0002, 0.0005, 0.001, 0.002, 0.005]]
+    selected_lrs = {
+        "SGD": choose_best_lr(SGD_NaiveBayesEF, true_model, lr_size, batch, 17, x_val, y_val),
+        "DSNGD": choose_best_lr(DSNGD_NaiveBayesEF, true_model, lr_size, batch, 17, x_val, y_val),
+    }
     results = {
-        "SGD": choose_best_run(SGD_NaiveBayesEF, candidates, true_model, train_size, batch, 7, x_val, y_val),
-        "DSNGD": choose_best_run(DSNGD_NaiveBayesEF, candidates, true_model, train_size, batch, 7, x_val, y_val),
+        "SGD": run_with_selected_lr(
+            SGD_NaiveBayesEF,
+            selected_lrs["SGD"]["lr"],
+            true_model,
+            train_size,
+            batch,
+            7,
+            x_val,
+            y_val,
+        ),
+        "DSNGD": run_with_selected_lr(
+            DSNGD_NaiveBayesEF,
+            selected_lrs["DSNGD"]["lr"],
+            true_model,
+            train_size,
+            batch,
+            7,
+            x_val,
+            y_val,
+        ),
     }
 
     save_curves(samples_seen, results, true_nll)
@@ -153,8 +198,9 @@ def main():
     print(f"Saved results to {OUTPUT_DIR}")
     print(f"True model validation NLL: {true_nll:.6f}")
     for name, result in results.items():
+        a, b = result["lr"]
         print(
-            f"{name}: lr={result['lr'][0]:g}, initial={result['curve'][0]:.6f}, final={result['curve'][-1]:.6f}"
+            f"{name}: a={a:g}, b={b:g}, initial={result['curve'][0]:.6f}, final={result['curve'][-1]:.6f}"
         )
 
 
