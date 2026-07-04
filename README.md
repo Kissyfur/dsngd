@@ -55,6 +55,7 @@ Core pieces:
 
 - `src.model.NaiveBayesEF`: generic model for heterogeneous feature coordinates.
 - `src.algorithms.dsngd_ef.DSNGD_NaiveBayesEF`: generic DSNGD direction/update.
+- `src.algorithms.sgd_ef.SGD_NaiveBayesEF`: generic SGD baseline for the same models.
 - `src.data.ef_sample_creator.NaiveBayesEFSampleIterator`: synthetic sampler for
   categorical, continuous, and mixed feature vectors.
 
