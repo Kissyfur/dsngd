@@ -64,3 +64,13 @@ Run the smoke tests with:
 ```bash
 python -m unittest discover -s tests
 ```
+
+Run a small mixed categorical/Gaussian comparison between generic SGD and DSNGD
+with:
+
+```bash
+python bin/experiment_ef_small.py
+```
+
+The script writes validation-loss plots and CSV summaries to
+`outputs/ef_small_comparison/`.
