@@ -11,6 +11,7 @@ from src.algorithms.dsngd_ef import DSNGD_NaiveBayesEF
 from src.algorithms.sgd_ef import SGD_NaiveBayesEF
 from src.data.ef_sample_creator import NaiveBayesEFSampleIterator
 from src.families import CategoricalCoordinate, GaussianKnownVarianceCoordinate
+from src.grapher import color, linestyles
 from src.model.naive_bayes_ef import NaiveBayesEF
 
 
@@ -106,12 +107,22 @@ def run_with_selected_lr(algorithm_class, selected_lr, true_model, train_size, b
 
 def save_curves(samples_seen, results, true_nll):
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    plot_x = samples_seen.copy()
+    plot_x[plot_x <= 0] = 1.0
 
     plt.figure(figsize=(7, 4.2))
     for name, result in results.items():
         a, b = result["lr"]
-        plt.plot(samples_seen, result["curve"], label=f"{name} a={a:g}, b={b:g}")
+        plt.plot(
+            plot_x,
+            result["curve"],
+            label=f"{name} a={a:g}, b={b:g}",
+            color=color[name],
+            linestyle=linestyles[name],
+        )
     plt.axhline(true_nll, color="black", linestyle=":", label="true model")
+    plt.xscale("log")
+    plt.yscale("log")
     plt.xlabel("Samples seen")
     plt.ylabel("Validation negative log-likelihood")
     plt.title("Small mixed EF classification problem")
@@ -124,7 +135,15 @@ def save_curves(samples_seen, results, true_nll):
     for name, result in results.items():
         excess = np.maximum(result["curve"] - true_nll, 1e-8)
         a, b = result["lr"]
-        plt.semilogy(samples_seen, excess, label=f"{name} a={a:g}, b={b:g}")
+        plt.plot(
+            plot_x,
+            excess,
+            label=f"{name} a={a:g}, b={b:g}",
+            color=color[name],
+            linestyle=linestyles[name],
+        )
+    plt.xscale("log")
+    plt.yscale("log")
     plt.xlabel("Samples seen")
     plt.ylabel("Validation NLL gap over true model (clipped)")
     plt.title("Convergence on validation loss")
