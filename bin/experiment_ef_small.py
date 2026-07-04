@@ -1,5 +1,4 @@
 from pathlib import Path
-import itertools
 
 import matplotlib
 
@@ -82,28 +81,22 @@ def run_candidate(algorithm_class, true_model, lr, train_size, batch, train_seed
     return validation_curve(model, etas, x_val, y_val)
 
 
-def learning_rate_grid():
-    values = np.power(10.0, np.arange(-4, 2))
-    return list(itertools.product(values, values))
-
-
 def choose_best_lr(algorithm_class, true_model, lr_size, batch, train_seed, x_val, y_val):
-    best = None
-    for lr in learning_rate_grid():
-        try:
-            curve = run_candidate(algorithm_class, true_model, lr, lr_size, batch, train_seed, x_val, y_val)
-            score = float(np.sum(curve[-5:]))
-        except (FloatingPointError, OverflowError, ValueError):
-            continue
-        if not np.isfinite(score):
-            continue
-
-        result = {"lr": lr, "score": score}
-        if best is None or score < best["score"]:
-            best = result
-    if best is None:
-        raise RuntimeError(f"no stable learning rate found for {algorithm_class.__name__}")
-    return best
+    model = build_model()
+    optimizer = algorithm_class(model)
+    data = {
+        "model_factory": build_model,
+        "sample_factory": lambda: NaiveBayesEFSampleIterator(
+            true_model,
+            epoch_length=lr_size,
+            epochs=1,
+            batch=batch,
+            random_seed=train_seed,
+        ),
+        "validation_curve": lambda fit_model, etas: validation_curve(fit_model, etas, x_val, y_val),
+        "score_tail": 5,
+    }
+    return optimizer.adjust_lr_with_data(data, progress_bar=False)
 
 
 def run_with_selected_lr(algorithm_class, selected_lr, true_model, train_size, batch, train_seed, x_val, y_val):
@@ -172,7 +165,7 @@ def main():
     results = {
         "SGD": run_with_selected_lr(
             SGD_NaiveBayesEF,
-            selected_lrs["SGD"]["lr"],
+            selected_lrs["SGD"],
             true_model,
             train_size,
             batch,
@@ -182,7 +175,7 @@ def main():
         ),
         "DSNGD": run_with_selected_lr(
             DSNGD_NaiveBayesEF,
-            selected_lrs["DSNGD"]["lr"],
+            selected_lrs["DSNGD"],
             true_model,
             train_size,
             batch,

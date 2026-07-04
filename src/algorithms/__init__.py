@@ -1,11 +1,14 @@
 import numpy as np
 import itertools as iter
+from tqdm import tqdm
 
 
 class LineSearch:
     def __init__(self, director_process, name='LS'):
         self.director_process = director_process
         self.name = name
+        self.key = name
+        self.tqdm = tqdm
         self.single_learning_rate_parameter = False
         self.lr_update = self.regular_learning_rate
 
@@ -63,6 +66,19 @@ class LineSearch:
         #     print("Increase max max  b range")
         #     exit()
         return best_lr
+
+    def lr_training_function(self, data):
+        def run_algorithm_and_evaluate(lr):
+            model = data["model_factory"]()
+            optimizer = type(self)(model)
+            sample = data["sample_factory"]()
+            iter_keep = data.get("iter_keep", len(sample))
+            etas = optimizer.run(sample, model.eta, lr=lr, iter_keep=iter_keep)
+            curve = data["validation_curve"](model, etas)
+            score_tail = data.get("score_tail", 5)
+            return float(np.sum(curve[-score_tail:]))
+
+        return run_algorithm_and_evaluate
 
     @staticmethod
     def regular_learning_rate(i, learning_rate_param):
