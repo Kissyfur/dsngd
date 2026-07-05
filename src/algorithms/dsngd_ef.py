@@ -87,7 +87,8 @@ class DSNGD_NaiveBayesEF(LineSearch):
         dual_parameter = self.max_entropy_dual_parameter()
         etas = []
         length = max(len(sample) // iter_keep, 1)
-        iterator = tqdm(enumerate(sample), total=len(sample)) if verbose else enumerate(sample)
+        desc = kwargs.get("desc", self.key)
+        iterator = tqdm(enumerate(sample), total=len(sample), desc=desc) if verbose else enumerate(sample)
 
         for it, obs in iterator:
             if it % length == 0:

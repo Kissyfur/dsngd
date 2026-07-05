@@ -23,7 +23,7 @@ from src.grapher import color, linestyles
 from src.model.naive_bayes_ef import NaiveBayesEF
 
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 OUTPUT_DIR = Path("outputs") / "ef_mixed_experiment"
 MIN_EXCESS_NLL = 1e-10
@@ -182,14 +182,14 @@ def choose_best_lr(algorithm_class, model_factory, true_model, lr_size, batch, s
         "iter_keep": ITER_KEEP,
         "score_tail": 5,
     }
-    return optimizer.adjust_lr_with_data(data, progress_bar=False)
+    return optimizer.adjust_lr_with_data(data, progress_bar=True)
 
 
 def run_algorithm(algorithm_class, model_factory, true_model, lr, train_size, batch, seed, x_val, y_val, true_nll):
     model = model_factory()
     optimizer = algorithm_class(model)
     train = NaiveBayesEFSampleIterator(true_model, epoch_length=train_size, epochs=1, batch=batch, random_seed=seed)
-    etas = optimizer.run(train, model.eta, lr=lr, iter_keep=ITER_KEEP)
+    etas = optimizer.run(train, model.eta, lr=lr, iter_keep=ITER_KEEP, verbose=True, desc=f"{optimizer.key} training")
     return clipped_excess_curve(model, etas, x_val, y_val, true_nll)
 
 
@@ -277,6 +277,7 @@ def main():
                 true_model = build_true_model(many_classes, family_factories, sigma, seed=10_000 * row_index + 100 * col_index + exp_num)
                 x_val, y_val = collect_sample(true_model, validation_size, batch=1000, seed=20_000 + exp_num)
                 true_nll = validation_nll(true_model, true_model.eta, x_val, y_val)
+                logging.info("True model validation NLL: %.6f", true_nll)
 
                 for algorithm_name, algorithm_class in ALGORITHMS:
                     logging.info("Algorithm: %s", algorithm_name)
@@ -290,6 +291,7 @@ def main():
                         x_val=x_val,
                         y_val=y_val,
                     )
+                    logging.info("Selected lr for %s: a=%g, b=%g", algorithm_name, lr[0], lr[1])
                     curve = run_algorithm(
                         algorithm_class,
                         model_factory,
@@ -312,6 +314,7 @@ def main():
                     summary_rows.append(
                         (complexity_name, entropy_name, exp_num, algorithm_name, lr[0], lr[1], curve[-1])
                     )
+                    logging.info("Finished %s with final excess validation NLL %.6g", algorithm_name, curve[-1])
 
             for alg_index, algorithm_name in enumerate(algorithm_labels):
                 curves = np.array(curves_by_algorithm[algorithm_name])

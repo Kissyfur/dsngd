@@ -41,7 +41,7 @@ class LineSearch:
             best_lr = np.array([1., 1.])
             best_err = run_algorithm_and_evaluate_in_f(best_lr)
         if progress_bar:
-            learning_rates = self.tqdm(learning_rates)
+            learning_rates = self.tqdm(learning_rates, desc=f"{self.key} learning-rate search")
         for lr in learning_rates:
             try:
                 # print("lr: ", lr)
@@ -52,7 +52,7 @@ class LineSearch:
                     best_err = err
             except (OverflowError, np.linalg.LinAlgError, FloatingPointError):
                 pass
-        print("Best lr for", self.key, "is ", best_lr, "with error: ", best_err)
+        print("Best lr for", self.key, "is ", best_lr, "with error: ", best_err, flush=True)
         # if best_lr[0] == 10. ** a_exps[0]:
         #     print("Decrease min a range")
         #     exit()
