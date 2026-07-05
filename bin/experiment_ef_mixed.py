@@ -179,6 +179,7 @@ def choose_best_lr(algorithm_class, model_factory, true_model, lr_size, batch, s
             random_seed=seed,
         ),
         "validation_curve": lambda fit_model, etas: validation_curve(fit_model, etas, x_val, y_val),
+        "iter_keep": ITER_KEEP,
         "score_tail": 5,
     }
     return optimizer.adjust_lr_with_data(data, progress_bar=False)

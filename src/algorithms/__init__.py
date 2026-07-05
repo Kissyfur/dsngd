@@ -75,8 +75,8 @@ class LineSearch:
                 sample = data["sample_factory"]()
                 iter_keep = data.get("iter_keep", len(sample))
                 etas = optimizer.run(sample, model.eta, lr=lr, iter_keep=iter_keep)
-                curve = data["validation_curve"](model, etas)
                 score_tail = data.get("score_tail", 5)
+                curve = data["validation_curve"](model, etas[-score_tail:])
                 return float(np.sum(curve[-score_tail:]))
             except (OverflowError, np.linalg.LinAlgError, FloatingPointError, ValueError):
                 return np.inf
