@@ -6,9 +6,10 @@ from src.families.base import ExponentialFamilyCoordinate
 class ExponentialMeanCoordinate(ExponentialFamilyCoordinate):
     """Exponential coordinate with mean as expectation parameter."""
 
-    def __init__(self, min_mean=1e-12):
+    def __init__(self, min_mean=1e-12, natural_margin=1e-8):
         super().__init__(1)
         self.min_mean = float(min_mean)
+        self.natural_margin = float(natural_margin)
 
     def sufficient_statistic(self, x):
         x = self._validate_observation(x)
@@ -46,6 +47,10 @@ class ExponentialMeanCoordinate(ExponentialFamilyCoordinate):
     def sample(self, expectation_parameter, rng, size=None):
         mean = self._validate_expectation(expectation_parameter)
         return rng.exponential(scale=mean[..., 0], size=size)
+
+    def project_natural(self, natural_parameter):
+        theta = np.asarray(natural_parameter, dtype=float)
+        return np.minimum(theta, -self.natural_margin)
 
     def _validate_expectation(self, expectation_parameter):
         expectation = np.asarray(expectation_parameter, dtype=float)

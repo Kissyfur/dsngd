@@ -22,8 +22,7 @@ class PoissonCoordinate(ExponentialFamilyCoordinate):
     def log_density(self, x, natural_parameter):
         x = self._validate_observation(x)
         theta = np.asarray(natural_parameter, dtype=float)
-        rate = self.expectation_from_natural(theta)[..., 0]
-        return x * np.log(rate) - rate - gammaln(x + 1.0)
+        return x * theta[..., 0] - np.exp(theta[..., 0]) - gammaln(x + 1.0)
 
     def expectation_from_natural(self, natural_parameter):
         theta = np.asarray(natural_parameter, dtype=float)

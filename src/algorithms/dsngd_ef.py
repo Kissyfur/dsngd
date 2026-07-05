@@ -98,6 +98,7 @@ class DSNGD_NaiveBayesEF(LineSearch):
             alpha -= rate * ng_alpha
             for block, direction in zip(beta_blocks, ng_beta_blocks):
                 block -= rate * direction
+            alpha, beta_blocks = self.model.project_eta((alpha, beta_blocks))
             self.update_dual_parameter(dual_parameter, obs)
 
         etas.append([alpha.copy(), [block.copy() for block in beta_blocks]])

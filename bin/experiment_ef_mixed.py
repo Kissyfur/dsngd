@@ -147,9 +147,12 @@ def validation_curve(model, etas, x, y):
     values = []
     for eta in etas:
         try:
-            values.append(validation_nll(model, eta, x, y))
+            value = validation_nll(model, eta, x, y)
         except (OverflowError, FloatingPointError, ValueError):
-            values.append(np.inf)
+            value = np.inf
+        if not np.isfinite(value):
+            value = np.inf
+        values.append(value)
     return np.array(values)
 
 
@@ -315,6 +318,8 @@ def main():
                         (complexity_name, entropy_name, exp_num, algorithm_name, lr[0], lr[1], curve[-1])
                     )
                     logging.info("Finished %s with final excess validation NLL %.6g", algorithm_name, curve[-1])
+                    save_summary(summary_rows)
+                    save_curves(curve_rows)
 
             for alg_index, algorithm_name in enumerate(algorithm_labels):
                 curves = np.array(curves_by_algorithm[algorithm_name])

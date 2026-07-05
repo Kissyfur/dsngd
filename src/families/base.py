@@ -38,3 +38,7 @@ class ExponentialFamilyCoordinate(ABC):
     @abstractmethod
     def sample(self, expectation_parameter, rng, size=None):
         """Draw samples using expectation coordinates."""
+
+    def project_natural(self, natural_parameter):
+        """Project a natural parameter back into this family's valid domain."""
+        return natural_parameter

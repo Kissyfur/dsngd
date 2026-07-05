@@ -101,6 +101,12 @@ class PoissonCoordinateTests(unittest.TestCase):
 
         np.testing.assert_allclose(log_density, expected)
 
+    def test_log_density_is_stable_for_underflowing_rate(self):
+        family = PoissonCoordinate()
+        log_density = family.log_density(np.array([0.0, 1.0]), np.array([-1000.0]))
+
+        np.testing.assert_allclose(log_density, np.array([0.0, -1000.0]))
+
     def test_dual_score_matches_finite_difference(self):
         family = PoissonCoordinate()
         x = 4.0
@@ -136,6 +142,13 @@ class ExponentialMeanCoordinateTests(unittest.TestCase):
         expected = -np.log(2.0) - np.array([0.0, 2.0, 4.0]) / 2.0
 
         np.testing.assert_allclose(log_density, expected)
+
+    def test_project_natural_keeps_parameter_in_domain(self):
+        family = ExponentialMeanCoordinate(natural_margin=1e-6)
+
+        projected = family.project_natural(np.array([1.0, 0.0, -2.0]))
+
+        np.testing.assert_allclose(projected, np.array([-1e-6, -1e-6, -2.0]))
 
     def test_dual_score_matches_finite_difference(self):
         family = ExponentialMeanCoordinate()

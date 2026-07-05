@@ -47,7 +47,7 @@ class LineSearch:
                 # print("lr: ", lr)
                 err = run_algorithm_and_evaluate_in_f(lr)
                 # print("error: ", err)
-                if np.isnan(best_err) or err < best_err:
+                if not np.isfinite(best_err) or err < best_err:
                     best_lr = lr
                     best_err = err
             except (OverflowError, np.linalg.LinAlgError, FloatingPointError):
@@ -77,6 +77,8 @@ class LineSearch:
                 etas = optimizer.run(sample, model.eta, lr=lr, iter_keep=iter_keep)
                 score_tail = data.get("score_tail", 5)
                 curve = data["validation_curve"](model, etas[-score_tail:])
+                if not np.all(np.isfinite(curve)):
+                    return np.inf
                 return float(np.sum(curve[-score_tail:]))
             except (OverflowError, np.linalg.LinAlgError, FloatingPointError, ValueError):
                 return np.inf

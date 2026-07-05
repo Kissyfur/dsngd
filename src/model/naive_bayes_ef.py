@@ -55,6 +55,18 @@ class NaiveBayesEF:
                 return False
         return True
 
+    def project_eta(self, eta):
+        if not self.valid_eta(eta):
+            raise ValueError("eta has incompatible shapes")
+        alpha, beta_blocks = eta
+        return (
+            np.asarray(alpha, dtype=float),
+            [
+                family.project_natural(np.asarray(block, dtype=float))
+                for family, block in zip(self.families, beta_blocks)
+            ],
+        )
+
     def class_log_weights(self, eta=None):
         alpha, beta_blocks = self._resolve_eta(eta)
         alpha_s = np.concatenate([alpha, np.zeros(1, dtype=float)])

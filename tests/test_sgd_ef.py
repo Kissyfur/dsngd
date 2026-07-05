@@ -4,7 +4,7 @@ import numpy as np
 
 from src.algorithms.sgd import SGD_JointMLR
 from src.algorithms.sgd_ef import SGD_NaiveBayesEF
-from src.families import CategoricalCoordinate, GaussianKnownVarianceCoordinate
+from src.families import CategoricalCoordinate, ExponentialMeanCoordinate, GaussianKnownVarianceCoordinate
 from src.model.joint_mlr import JointMLR
 from src.model.naive_bayes_ef import NaiveBayesEF
 
@@ -84,6 +84,22 @@ class SGDEFTests(unittest.TestCase):
             np.linalg.norm(final_alpha) + sum(np.linalg.norm(block) for block in final_beta_blocks),
             0.0,
         )
+
+    def test_run_projects_exponential_coordinate_after_large_step(self):
+        model = NaiveBayesEF(2, [ExponentialMeanCoordinate(natural_margin=1e-6)])
+        optimizer = SGD_NaiveBayesEF(model)
+        sample = [
+            (
+                np.array([[10.0], [10.0]]),
+                np.array([0, 0]),
+            )
+        ]
+
+        etas = optimizer.run(sample, model.eta, lr=[1.0, 0.0], iter_keep=1)
+
+        _, final_beta_blocks = etas[-1]
+        self.assertTrue(np.all(final_beta_blocks[0] < 0.0))
+        self.assertEqual(final_beta_blocks[0][0, 0], -1e-6)
 
 
 if __name__ == "__main__":

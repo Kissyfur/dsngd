@@ -44,6 +44,7 @@ class SGD_NaiveBayesEF(LineSearch):
             alpha -= rate * grad_alpha
             for block, gradient in zip(beta_blocks, grad_beta_blocks):
                 block -= rate * gradient
+            alpha, beta_blocks = self.model.project_eta((alpha, beta_blocks))
 
         etas.append([alpha.copy(), [block.copy() for block in beta_blocks]])
         return etas
