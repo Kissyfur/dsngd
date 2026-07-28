@@ -6,13 +6,55 @@ from src.families import CategoricalCoordinate
 from src.model.naive_bayes_ef import NaiveBayesEF
 
 
+class EmpiricalSufficientStatisticDual:
+    """Default DSNGD dual state based on empirical sufficient statistics."""
+
+    def initial_parameter(self, model, strength=None):
+        if strength is None:
+            strength = model.many_classes
+        class_dual = np.ones(model.many_classes, dtype=float) * float(strength) / model.many_classes
+        beta_dual_blocks = []
+        for family in model.families:
+            initial = family.initial_expectation()
+            beta_dual_blocks.append(initial.reshape(-1, 1) * class_dual.reshape(1, -1))
+        return class_dual, beta_dual_blocks
+
+    def update(self, model, dual_parameter, sample, all_categorical=False):
+        x, y = sample
+        x = model._as_feature_matrix(x)
+        y = np.asarray(y, dtype=int)
+        class_dual, beta_dual_blocks = dual_parameter
+
+        class_dual += np.bincount(y, minlength=model.many_classes)
+        if all_categorical:
+            for feature_index, (family, block) in enumerate(zip(model.families, beta_dual_blocks)):
+                xi = x[:, feature_index].astype(int)
+                non_baseline = xi < family.dim
+                np.add.at(block, (xi[non_baseline], y[non_baseline]), 1.0)
+            return dual_parameter
+
+        class_indicators = np.eye(model.many_classes)[y]
+        for feature_index, (family, block) in enumerate(zip(model.families, beta_dual_blocks)):
+            statistics = family.sufficient_statistic(x[:, feature_index])
+            block += statistics.T @ class_indicators
+        return dual_parameter
+
+
 class DSNGD_NaiveBayesEF(LineSearch):
     CLASS_NAME = "DSNGD-EF"
 
-    def __init__(self, model: NaiveBayesEF, name=CLASS_NAME):
+    def __init__(self, model: NaiveBayesEF, name=CLASS_NAME, dual_parametrization=None):
         super(DSNGD_NaiveBayesEF, self).__init__(self.approx_natural_gradient_log_conditional_probability, name)
         self.model = model
+        self.dual_parametrization = dual_parametrization or EmpiricalSufficientStatisticDual()
         self._all_categorical = all(isinstance(family, CategoricalCoordinate) for family in self.model.families)
+
+    def clone_for_model(self, model):
+        return type(self)(
+            model,
+            name=self.name,
+            dual_parametrization=self.dual_parametrization,
+        )
 
     def approx_natural_gradient_log_conditional_probability(self, sample, eta, dual_parameter):
         x, y = sample
@@ -25,16 +67,16 @@ class DSNGD_NaiveBayesEF(LineSearch):
         if np.any(class_dual <= 0.0):
             raise ValueError("class dual parameters must be positive")
 
+        q_minus_e = self.model.conditional_probabilities(x, eta)
+        q_minus_e[np.arange(len(y)), y] -= 1.0
+        if self._all_categorical:
+            return self._categorical_direction(x, q_minus_e, class_dual, beta_dual_blocks)
+
         u = np.sum(class_dual) / class_dual
         theta_star_blocks = [
             block / class_dual.reshape(1, self.model.many_classes)
             for block in beta_dual_blocks
         ]
-
-        q_minus_e = self.model.conditional_probabilities(x, eta)
-        q_minus_e[np.arange(len(y)), y] -= 1.0
-        if self._all_categorical:
-            return self._categorical_direction(x, q_minus_e, class_dual, beta_dual_blocks)
 
         v = np.ones_like(q_minus_e)
         feature_scores = []
@@ -83,33 +125,15 @@ class DSNGD_NaiveBayesEF(LineSearch):
         return alpha_direction, beta_directions
 
     def max_entropy_dual_parameter(self, strength=None):
-        if strength is None:
-            strength = self.model.many_classes
-        class_dual = np.ones(self.model.many_classes, dtype=float) * float(strength) / self.model.many_classes
-        beta_dual_blocks = []
-        for family in self.model.families:
-            initial = family.initial_expectation()
-            beta_dual_blocks.append(initial.reshape(-1, 1) * class_dual.reshape(1, -1))
-        return class_dual, beta_dual_blocks
+        return self.dual_parametrization.initial_parameter(self.model, strength=strength)
 
     def update_dual_parameter(self, dual_parameter, sample):
-        x, y = sample
-        x = self.model._as_feature_matrix(x)
-        y = np.asarray(y, dtype=int)
-        class_dual, beta_dual_blocks = dual_parameter
-
-        class_dual += np.bincount(y, minlength=self.model.many_classes)
-        if self._all_categorical:
-            for feature_index, (family, block) in enumerate(zip(self.model.families, beta_dual_blocks)):
-                xi = x[:, feature_index].astype(int)
-                non_baseline = xi < family.dim
-                np.add.at(block, (xi[non_baseline], y[non_baseline]), 1.0)
-            return
-
-        class_indicators = np.eye(self.model.many_classes)[y]
-        for feature_index, (family, block) in enumerate(zip(self.model.families, beta_dual_blocks)):
-            statistics = family.sufficient_statistic(x[:, feature_index])
-            block += statistics.T @ class_indicators
+        return self.dual_parametrization.update(
+            self.model,
+            dual_parameter,
+            sample,
+            all_categorical=self._all_categorical,
+        )
 
     def run(self, sample, starting_point, lr, iter_keep=100, verbose=False, **kwargs):
         alpha, beta_blocks = starting_point

@@ -24,6 +24,9 @@ class LineSearch:
             param -= r * d
         return params
 
+    def clone_for_model(self, model):
+        return type(self)(model)
+
     def adjust_lr_with_data(self, data, seed=0, progress_bar=True):
         run_algorithm_and_evaluate_in_f = self.lr_training_function(data)
         if self.single_learning_rate_parameter:
@@ -71,7 +74,7 @@ class LineSearch:
         def run_algorithm_and_evaluate(lr):
             try:
                 model = data["model_factory"]()
-                optimizer = type(self)(model)
+                optimizer = self.clone_for_model(model)
                 sample = data["sample_factory"]()
                 iter_keep = data.get("iter_keep", len(sample))
                 etas = optimizer.run(sample, model.eta, lr=lr, iter_keep=iter_keep)

@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 
 from src.algorithms.dsngd import DSNGD_JointMLR
-from src.algorithms.dsngd_ef import DSNGD_NaiveBayesEF
+from src.algorithms.dsngd_ef import DSNGD_NaiveBayesEF, EmpiricalSufficientStatisticDual
 from src.families import CategoricalCoordinate
 from src.model.joint_mlr import JointMLR
 from src.model.naive_bayes_ef import NaiveBayesEF
@@ -27,6 +27,21 @@ def split_dual_beta(beta_dual, feature_values):
         blocks.append(beta_dual[start:start + many_values - 1])
         start = end
     return blocks
+
+
+class TrackingDualParametrization:
+    def __init__(self):
+        self.default = EmpiricalSufficientStatisticDual()
+        self.initial_calls = 0
+        self.update_calls = 0
+
+    def initial_parameter(self, model, strength=None):
+        self.initial_calls += 1
+        return self.default.initial_parameter(model, strength=strength)
+
+    def update(self, model, dual_parameter, sample, all_categorical=False):
+        self.update_calls += 1
+        return self.default.update(model, dual_parameter, sample, all_categorical=all_categorical)
 
 
 class DSNGDEFTests(unittest.TestCase):
@@ -98,6 +113,31 @@ class DSNGDEFTests(unittest.TestCase):
             np.linalg.norm(final_alpha) + sum(np.linalg.norm(block) for block in final_beta_blocks),
             0.0,
         )
+
+    def test_run_uses_injected_dual_parametrization(self):
+        model = NaiveBayesEF(2, [CategoricalCoordinate(2)])
+        dual_parametrization = TrackingDualParametrization()
+        optimizer = DSNGD_NaiveBayesEF(model, dual_parametrization=dual_parametrization)
+        sample = [
+            (
+                np.array([[0], [1], [0], [1]]),
+                np.array([0, 1, 0, 1]),
+            )
+        ]
+
+        optimizer.run(sample, model.eta, lr=[0.01, 0.0], iter_keep=1)
+
+        self.assertEqual(dual_parametrization.initial_calls, 1)
+        self.assertEqual(dual_parametrization.update_calls, 1)
+
+    def test_clone_preserves_injected_dual_parametrization(self):
+        model = NaiveBayesEF(2, [CategoricalCoordinate(2)])
+        dual_parametrization = TrackingDualParametrization()
+        optimizer = DSNGD_NaiveBayesEF(model, dual_parametrization=dual_parametrization)
+
+        clone = optimizer.clone_for_model(NaiveBayesEF(2, [CategoricalCoordinate(2)]))
+
+        self.assertIs(clone.dual_parametrization, dual_parametrization)
 
 
 if __name__ == "__main__":
