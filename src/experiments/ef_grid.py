@@ -38,6 +38,8 @@ ALGORITHMS = (
     ("DSNGD", DSNGD_NaiveBayesEF),
 )
 
+PURE_FAMILY_KEYS = ("categorical", "gaussian", "poisson", "exponential")
+
 
 @dataclass(frozen=True)
 class EFExperimentSpec:
@@ -83,6 +85,29 @@ def categorical_scenarios():
     return tuple(
         (name, many_classes, tuple(categorical(value) for value in feature_values))
         for name, many_classes, feature_values in paper_discrete_layouts()
+    )
+
+
+def mixed_repeated_block(repetitions):
+    category_values = (10, 5, 10)
+    factories = []
+    for repetition in range(repetitions):
+        factories.extend(
+            (
+                categorical(category_values[repetition % len(category_values)]),
+                gaussian(),
+                poisson(),
+                exponential(),
+            )
+        )
+    return tuple(factories)
+
+
+def mixed_repeated_scenarios():
+    return (
+        ("M1", 10, mixed_repeated_block(1)),
+        ("M2", 20, mixed_repeated_block(2)),
+        ("M3", 30, mixed_repeated_block(3)),
     )
 
 
@@ -136,6 +161,13 @@ FAMILY_EXPERIMENT_SPECS = {
         output_name="exponential_ef",
         default_output_dir="ef_exponential_experiment",
         complexity_scenarios=repeated_family_scenarios(exponential()),
+    ),
+    "mixed_repeated": EFExperimentSpec(
+        key="mixed_repeated",
+        title="Repeated Mixed EF",
+        output_name="mixed_repeated_ef",
+        default_output_dir="ef_mixed_repeated_experiment",
+        complexity_scenarios=mixed_repeated_scenarios(),
     ),
     "mixed": EFExperimentSpec(
         key="mixed",

@@ -2,7 +2,7 @@ import argparse
 import logging
 from pathlib import Path
 
-from src.experiments.ef_grid import FAMILY_EXPERIMENT_SPECS, run_grid_experiment
+from src.experiments.ef_grid import FAMILY_EXPERIMENT_SPECS, PURE_FAMILY_KEYS, run_grid_experiment
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -12,7 +12,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Run 3x3 EF experiments for one exponential family.")
     parser.add_argument(
         "family",
-        choices=tuple(name for name in FAMILY_EXPERIMENT_SPECS if name != "mixed") + ("all",),
+        choices=PURE_FAMILY_KEYS + ("all",),
         help="Family to run, or all pure-family experiments.",
     )
     parser.add_argument("--train-size", type=int, default=10_000_000)
@@ -41,7 +41,7 @@ def run_family(name, args):
 def main():
     args = parse_args()
     family_names = (
-        [name for name in FAMILY_EXPERIMENT_SPECS if name != "mixed"]
+        list(PURE_FAMILY_KEYS)
         if args.family == "all"
         else [args.family]
     )

@@ -4,6 +4,7 @@ import numpy as np
 
 from src.experiments.ef_grid import (
     FAMILY_EXPERIMENT_SPECS,
+    PURE_FAMILY_KEYS,
     build_model,
     build_true_model,
     collect_sample,
@@ -14,14 +15,21 @@ from src.experiments.ef_grid import (
 
 class EFGridExperimentTests(unittest.TestCase):
     def test_pure_family_specs_have_three_complexity_levels(self):
-        for family_name in ("categorical", "gaussian", "poisson", "exponential"):
+        for family_name in PURE_FAMILY_KEYS:
             with self.subTest(family=family_name):
                 spec = FAMILY_EXPERIMENT_SPECS[family_name]
                 self.assertEqual(len(spec.complexity_scenarios), 3)
                 self.assertEqual([scenario[0] for scenario in spec.complexity_scenarios], ["M1", "M2", "M3"])
 
+    def test_mixed_repeated_spec_repeats_all_family_types(self):
+        spec = FAMILY_EXPERIMENT_SPECS["mixed_repeated"]
+
+        self.assertEqual([scenario[0] for scenario in spec.complexity_scenarios], ["M1", "M2", "M3"])
+        self.assertEqual([scenario[1] for scenario in spec.complexity_scenarios], [10, 20, 30])
+        self.assertEqual([len(scenario[2]) for scenario in spec.complexity_scenarios], [4, 8, 12])
+
     def test_family_specs_build_valid_true_models_and_samples(self):
-        for family_name in ("categorical", "gaussian", "poisson", "exponential"):
+        for family_name in PURE_FAMILY_KEYS + ("mixed_repeated",):
             with self.subTest(family=family_name):
                 spec = FAMILY_EXPERIMENT_SPECS[family_name]
                 _, many_classes, family_factories = spec.complexity_scenarios[0]
