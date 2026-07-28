@@ -11,13 +11,17 @@ class EmpiricalSufficientStatisticDual:
 
     def initial_parameter(self, model, strength=None):
         if strength is None:
-            strength = model.many_classes
+            strength = self.default_strength(model)
         class_dual = np.ones(model.many_classes, dtype=float) * float(strength) / model.many_classes
         beta_dual_blocks = []
         for family in model.families:
             initial = family.initial_expectation()
             beta_dual_blocks.append(initial.reshape(-1, 1) * class_dual.reshape(1, -1))
         return class_dual, beta_dual_blocks
+
+    @staticmethod
+    def default_strength(model):
+        return (model.feature_dim + 1) * model.many_classes
 
     def update(self, model, dual_parameter, sample, all_categorical=False):
         x, y = sample

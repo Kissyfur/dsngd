@@ -88,6 +88,20 @@ class DSNGDEFTests(unittest.TestCase):
         np.testing.assert_allclose(new_alpha_direction, old_alpha_direction)
         np.testing.assert_allclose(np.vstack(new_beta_directions), old_beta_direction)
 
+    def test_default_categorical_dual_matches_legacy_initialization(self):
+        many_classes = 4
+        feature_values = [3, 5, 2]
+        old_optimizer = DSNGD_JointMLR(JointMLR(many_classes, feature_values))
+        new_optimizer = DSNGD_NaiveBayesEF(
+            NaiveBayesEF(many_classes, [CategoricalCoordinate(value) for value in feature_values])
+        )
+
+        old_class_dual, old_beta_dual = old_optimizer.max_entropy_dual_parameter()
+        new_class_dual, new_beta_dual_blocks = new_optimizer.max_entropy_dual_parameter()
+
+        np.testing.assert_allclose(new_class_dual, old_class_dual)
+        np.testing.assert_allclose(np.vstack(new_beta_dual_blocks), np.vstack(split_dual_beta(old_beta_dual, feature_values)))
+
     def test_short_generic_run_updates_parameters(self):
         model = NaiveBayesEF(3, [CategoricalCoordinate(2), CategoricalCoordinate(3)])
         optimizer = DSNGD_NaiveBayesEF(model)
