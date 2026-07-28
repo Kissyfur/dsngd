@@ -83,11 +83,13 @@ class NaiveBayesEF:
 
     def log_conditional_probabilities(self, x, eta=None):
         x = self._as_feature_matrix(x)
-        _, beta_blocks = self._resolve_eta(eta)
-        log_probabilities = np.tile(self.log_class_probabilities(eta), (len(x), 1))
+        alpha, beta_blocks = self._resolve_eta(eta)
+        log_probabilities = np.empty((len(x), self.many_classes), dtype=float)
+        log_probabilities[:, :-1] = alpha
+        log_probabilities[:, -1] = 0.0
         for feature_index, (family, block) in enumerate(zip(self.families, beta_blocks)):
-            values = x[:, feature_index:feature_index + 1]
-            log_probabilities += family.log_density(values, block.T)
+            statistics = family.sufficient_statistic(x[:, feature_index])
+            log_probabilities += statistics @ block
         normalizer = logsumexp(log_probabilities, axis=1, keepdims=True)
         return log_probabilities - normalizer
 

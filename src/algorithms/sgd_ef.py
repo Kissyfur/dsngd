@@ -16,7 +16,8 @@ class SGD_NaiveBayesEF(LineSearch):
         x, y = sample
         x = self.model._as_feature_matrix(x)
         y = np.asarray(y, dtype=int)
-        q_minus_e = self.model.conditional_probabilities(x, eta) - np.eye(self.model.many_classes)[y]
+        q_minus_e = self.model.conditional_probabilities(x, eta)
+        q_minus_e[np.arange(len(y)), y] -= 1.0
 
         grad_alpha = np.sum(q_minus_e[:, :-1], axis=0)
         grad_beta_blocks = [

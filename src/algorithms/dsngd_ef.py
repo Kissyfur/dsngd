@@ -2,6 +2,7 @@ import numpy as np
 from tqdm import tqdm
 
 from src.algorithms import LineSearch
+from src.families import CategoricalCoordinate
 from src.model.naive_bayes_ef import NaiveBayesEF
 
 
@@ -11,6 +12,7 @@ class DSNGD_NaiveBayesEF(LineSearch):
     def __init__(self, model: NaiveBayesEF, name=CLASS_NAME):
         super(DSNGD_NaiveBayesEF, self).__init__(self.approx_natural_gradient_log_conditional_probability, name)
         self.model = model
+        self._all_categorical = all(isinstance(family, CategoricalCoordinate) for family in self.model.families)
 
     def approx_natural_gradient_log_conditional_probability(self, sample, eta, dual_parameter):
         x, y = sample
@@ -29,7 +31,11 @@ class DSNGD_NaiveBayesEF(LineSearch):
             for block in beta_dual_blocks
         ]
 
-        q_minus_e = self.model.conditional_probabilities(x, eta) - np.eye(self.model.many_classes)[y]
+        q_minus_e = self.model.conditional_probabilities(x, eta)
+        q_minus_e[np.arange(len(y)), y] -= 1.0
+        if self._all_categorical:
+            return self._categorical_direction(x, q_minus_e, class_dual, beta_dual_blocks)
+
         v = np.ones_like(q_minus_e)
         feature_scores = []
         for feature_index, (family, theta_star_block) in enumerate(zip(self.model.families, theta_star_blocks)):
@@ -43,6 +49,35 @@ class DSNGD_NaiveBayesEF(LineSearch):
             np.einsum("ncd,nc->dc", scores, scaled_q)
             for scores in feature_scores
         ]
+
+        alpha_direction = alpha_full[:-1] - alpha_full[-1]
+        return alpha_direction, beta_directions
+
+    def _categorical_direction(self, x, q_minus_e, class_dual, beta_dual_blocks):
+        total_dual = np.sum(class_dual)
+        u = total_dual / class_dual
+        alpha_full = np.sum(q_minus_e * u, axis=0) * (1.0 - len(self.model.families))
+        beta_directions = []
+
+        for feature_index, (family, block) in enumerate(zip(self.model.families, beta_dual_blocks)):
+            xi = x[:, feature_index].astype(int)
+            if np.any((xi < 0) | (xi >= family.many_values)):
+                raise ValueError("categorical values must be in [0, many_values)")
+
+            probabilities = np.empty((family.many_values, self.model.many_classes), dtype=float)
+            probabilities[:-1] = block / class_dual.reshape(1, -1)
+            probabilities[-1] = 1.0 - np.sum(probabilities[:-1], axis=0)
+            if np.any(probabilities <= family.min_probability):
+                raise ValueError("expectation_parameter must be in the categorical simplex interior")
+
+            d_q = q_minus_e * (u / probabilities[xi])
+            baseline_rows = xi == family.dim
+            beta_direction = family.sufficient_statistic(xi).T @ d_q
+            if np.any(baseline_rows):
+                baseline_sum = np.sum(d_q[baseline_rows], axis=0)
+                alpha_full += baseline_sum
+                beta_direction -= baseline_sum.reshape(1, -1)
+            beta_directions.append(beta_direction)
 
         alpha_direction = alpha_full[:-1] - alpha_full[-1]
         return alpha_direction, beta_directions
@@ -64,6 +99,13 @@ class DSNGD_NaiveBayesEF(LineSearch):
         class_dual, beta_dual_blocks = dual_parameter
 
         class_dual += np.bincount(y, minlength=self.model.many_classes)
+        if self._all_categorical:
+            for feature_index, (family, block) in enumerate(zip(self.model.families, beta_dual_blocks)):
+                xi = x[:, feature_index].astype(int)
+                non_baseline = xi < family.dim
+                np.add.at(block, (xi[non_baseline], y[non_baseline]), 1.0)
+            return
+
         class_indicators = np.eye(self.model.many_classes)[y]
         for feature_index, (family, block) in enumerate(zip(self.model.families, beta_dual_blocks)):
             statistics = family.sufficient_statistic(x[:, feature_index])
