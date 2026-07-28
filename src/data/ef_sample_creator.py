@@ -19,6 +19,11 @@ class NaiveBayesEFSampleIterator:
         self.rng = np.random.default_rng(self.random_seed)
         self.current_epoch = 0
         self.current_epoch_length = 0
+        self._class_probabilities = self.model.class_probabilities()
+        self._expectation_blocks = [
+            family.expectation_from_natural(block.T)
+            for family, block in zip(self.model.families, self.model.beta_blocks)
+        ]
         return self
 
     def __next__(self):
@@ -36,16 +41,15 @@ class NaiveBayesEFSampleIterator:
         return self.epochs * math.ceil(self.epoch_length / self.batch)
 
     def _sample_batch(self, batch_size):
-        class_probabilities = self.model.class_probabilities()
-        y = self.rng.choice(self.model.many_classes, size=batch_size, p=class_probabilities)
+        y = self.rng.choice(self.model.many_classes, size=batch_size, p=self._class_probabilities)
         x = np.zeros((batch_size, len(self.model.families)), dtype=float)
 
         for class_index in range(self.model.many_classes):
             rows = np.nonzero(y == class_index)[0]
             if len(rows) == 0:
                 continue
-            for feature_index, (family, block) in enumerate(zip(self.model.families, self.model.beta_blocks)):
-                expectation = family.expectation_from_natural(block[:, class_index])
+            for feature_index, family in enumerate(self.model.families):
+                expectation = self._expectation_blocks[feature_index][class_index]
                 x[rows, feature_index] = family.sample(expectation, self.rng, size=len(rows))
 
         return x, y

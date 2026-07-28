@@ -47,14 +47,19 @@ class CategoricalCoordinate(ExponentialFamilyCoordinate):
 
     def dual_score(self, x, expectation_parameter):
         x = np.asarray(x, dtype=int)
+        if np.any((x < 0) | (x >= self.many_values)):
+            raise ValueError("categorical values must be in [0, many_values)")
         probabilities = self._full_probabilities(expectation_parameter)
-        score = np.zeros(x.shape + (self.dim,), dtype=float)
-        non_baseline = x < self.dim
-        if np.any(non_baseline):
-            score[non_baseline, x[non_baseline]] = 1.0 / probabilities[..., x[non_baseline]]
-        baseline = x == self.dim
+        probability_shape = probabilities.shape[:-1]
+        score = np.zeros(x.shape + probability_shape + (self.dim,), dtype=float)
+
+        for value in range(self.dim):
+            mask = (x == value)[(...,) + (None,) * len(probability_shape)]
+            score[..., value] = np.where(mask, 1.0 / probabilities[..., value], score[..., value])
+
+        baseline = (x == self.dim)[(...,) + (None,) * (len(probability_shape) + 1)]
         if np.any(baseline):
-            score[baseline] = -1.0 / probabilities[..., -1:]
+            score = np.where(baseline, -1.0 / probabilities[..., -1:], score)
         return score
 
     def initial_expectation(self):

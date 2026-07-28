@@ -19,12 +19,10 @@ class SGD_NaiveBayesEF(LineSearch):
         q_minus_e = self.model.conditional_probabilities(x, eta) - np.eye(self.model.many_classes)[y]
 
         grad_alpha = np.sum(q_minus_e[:, :-1], axis=0)
-        grad_beta_blocks = [np.zeros_like(block, dtype=float) for block in self.model.beta_blocks]
-
-        for feature_index, (family, grad_block) in enumerate(zip(self.model.families, grad_beta_blocks)):
-            statistics = family.sufficient_statistic(x[:, feature_index])
-            grad_block += statistics.T @ q_minus_e
-
+        grad_beta_blocks = [
+            family.sufficient_statistic(x[:, feature_index]).T @ q_minus_e
+            for feature_index, family in enumerate(self.model.families)
+        ]
         return grad_alpha, grad_beta_blocks
 
     def run(self, sample, starting_point, lr, iter_keep=100, verbose=False, **kwargs):

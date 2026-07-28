@@ -16,11 +16,10 @@ class NaiveBayesEF:
         self.name = name
         self.alpha = np.zeros(self.many_classes - 1, dtype=float)
         self.beta_blocks = [
-            np.column_stack(
-                [
-                    family.natural_from_expectation(family.initial_expectation())
-                    for _ in range(self.many_classes)
-                ]
+            np.repeat(
+                family.natural_from_expectation(family.initial_expectation()).reshape(-1, 1),
+                self.many_classes,
+                axis=1,
             )
             for family in self.families
         ]
@@ -72,8 +71,7 @@ class NaiveBayesEF:
         alpha_s = np.concatenate([alpha, np.zeros(1, dtype=float)])
         log_weights = alpha_s.copy()
         for family, block in zip(self.families, beta_blocks):
-            for class_index in range(self.many_classes):
-                log_weights[class_index] += family.log_partition(block[:, class_index])
+            log_weights += family.log_partition(block.T)
         return log_weights
 
     def log_class_probabilities(self, eta=None):
@@ -88,9 +86,8 @@ class NaiveBayesEF:
         _, beta_blocks = self._resolve_eta(eta)
         log_probabilities = np.tile(self.log_class_probabilities(eta), (len(x), 1))
         for feature_index, (family, block) in enumerate(zip(self.families, beta_blocks)):
-            values = x[:, feature_index]
-            for class_index in range(self.many_classes):
-                log_probabilities[:, class_index] += family.log_density(values, block[:, class_index])
+            values = x[:, feature_index:feature_index + 1]
+            log_probabilities += family.log_density(values, block.T)
         normalizer = logsumexp(log_probabilities, axis=1, keepdims=True)
         return log_probabilities - normalizer
 
@@ -102,11 +99,8 @@ class NaiveBayesEF:
         _, beta_blocks = self._resolve_eta(eta)
         beta_dual_blocks = []
         for family, block in zip(self.families, beta_blocks):
-            dual_block = np.zeros_like(block, dtype=float)
-            for class_index in range(self.many_classes):
-                expectation = family.expectation_from_natural(block[:, class_index])
-                dual_block[:, class_index] = class_probabilities[class_index] * expectation
-            beta_dual_blocks.append(dual_block)
+            expectations = family.expectation_from_natural(block.T).T
+            beta_dual_blocks.append(expectations * class_probabilities.reshape(1, -1))
         return class_probabilities, beta_dual_blocks
 
     def _resolve_eta(self, eta):

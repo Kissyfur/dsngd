@@ -30,27 +30,19 @@ class DSNGD_NaiveBayesEF(LineSearch):
         ]
 
         q_minus_e = self.model.conditional_probabilities(x, eta) - np.eye(self.model.many_classes)[y]
-        alpha_full = np.zeros(self.model.many_classes, dtype=float)
-        beta_directions = [np.zeros_like(block, dtype=float) for block in self.model.beta_blocks]
+        v = np.ones_like(q_minus_e)
+        feature_scores = []
+        for feature_index, (family, theta_star_block) in enumerate(zip(self.model.families, theta_star_blocks)):
+            scores = family.dual_score(x[:, feature_index], theta_star_block.T)
+            feature_scores.append(scores)
+            v -= np.einsum("cd,ncd->nc", theta_star_block.T, scores)
 
-        for row, q_row in enumerate(q_minus_e):
-            v = np.ones(self.model.many_classes, dtype=float)
-            feature_scores = []
-            for feature_index, (family, theta_star_block) in enumerate(zip(self.model.families, theta_star_blocks)):
-                value = x[row, feature_index]
-                scores = np.column_stack(
-                    [
-                        family.dual_score(value, theta_star_block[:, class_index])
-                        for class_index in range(self.model.many_classes)
-                    ]
-                )
-                feature_scores.append(scores)
-                v -= np.sum(theta_star_block * scores, axis=0)
-
-            scaled_q = u * q_row
-            alpha_full += v * scaled_q
-            for beta_direction, scores in zip(beta_directions, feature_scores):
-                beta_direction += scores * scaled_q.reshape(1, self.model.many_classes)
+        scaled_q = q_minus_e * u
+        alpha_full = np.sum(v * scaled_q, axis=0)
+        beta_directions = [
+            np.einsum("ncd,nc->dc", scores, scaled_q)
+            for scores in feature_scores
+        ]
 
         alpha_direction = alpha_full[:-1] - alpha_full[-1]
         return alpha_direction, beta_directions
@@ -62,11 +54,7 @@ class DSNGD_NaiveBayesEF(LineSearch):
         beta_dual_blocks = []
         for family in self.model.families:
             initial = family.initial_expectation()
-            beta_dual_blocks.append(
-                np.column_stack(
-                    [class_dual[class_index] * initial for class_index in range(self.model.many_classes)]
-                )
-            )
+            beta_dual_blocks.append(initial.reshape(-1, 1) * class_dual.reshape(1, -1))
         return class_dual, beta_dual_blocks
 
     def update_dual_parameter(self, dual_parameter, sample):
@@ -75,10 +63,11 @@ class DSNGD_NaiveBayesEF(LineSearch):
         y = np.asarray(y, dtype=int)
         class_dual, beta_dual_blocks = dual_parameter
 
-        for row, class_index in enumerate(y):
-            class_dual[class_index] += 1.0
-            for feature_index, (family, block) in enumerate(zip(self.model.families, beta_dual_blocks)):
-                block[:, class_index] += family.sufficient_statistic(x[row, feature_index])
+        class_dual += np.bincount(y, minlength=self.model.many_classes)
+        class_indicators = np.eye(self.model.many_classes)[y]
+        for feature_index, (family, block) in enumerate(zip(self.model.families, beta_dual_blocks)):
+            statistics = family.sufficient_statistic(x[:, feature_index])
+            block += statistics.T @ class_indicators
 
     def run(self, sample, starting_point, lr, iter_keep=100, verbose=False, **kwargs):
         alpha, beta_blocks = starting_point

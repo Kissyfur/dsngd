@@ -12,6 +12,7 @@ class GaussianKnownVarianceCoordinate(ExponentialFamilyCoordinate):
         super().__init__(1)
         self.variance = float(variance)
         self.std = np.sqrt(self.variance)
+        self.log_normalizer = -0.5 * np.log(2.0 * np.pi * self.variance)
 
     def sufficient_statistic(self, x):
         x = np.asarray(x, dtype=float)
@@ -19,14 +20,13 @@ class GaussianKnownVarianceCoordinate(ExponentialFamilyCoordinate):
 
     def log_partition(self, natural_parameter):
         theta = np.asarray(natural_parameter, dtype=float)
-        return 0.5 * self.variance * np.sum(theta * theta, axis=-1)
+        return 0.5 * self.variance * theta[..., 0] * theta[..., 0]
 
     def log_density(self, x, natural_parameter):
         x = np.asarray(x, dtype=float)
         theta = np.asarray(natural_parameter, dtype=float)
-        mean = self.expectation_from_natural(theta)
-        centered = x - mean[..., 0]
-        return -0.5 * np.log(2.0 * np.pi * self.variance) - 0.5 * centered * centered / self.variance
+        centered = x - self.variance * theta[..., 0]
+        return self.log_normalizer - 0.5 * centered * centered / self.variance
 
     def expectation_from_natural(self, natural_parameter):
         theta = np.asarray(natural_parameter, dtype=float)
@@ -43,7 +43,9 @@ class GaussianKnownVarianceCoordinate(ExponentialFamilyCoordinate):
         if expectation.shape[-1] != self.dim:
             raise ValueError(f"expected last dimension {self.dim}, got {expectation.shape[-1]}")
         x = np.asarray(x, dtype=float)
-        return np.expand_dims((x - expectation[..., 0]) / self.variance, axis=-1)
+        if expectation.ndim == 1:
+            return np.expand_dims((x - expectation[0]) / self.variance, axis=-1)
+        return np.expand_dims((x[..., None] - expectation[..., 0]) / self.variance, axis=-1)
 
     def initial_expectation(self):
         return np.zeros(self.dim, dtype=float)

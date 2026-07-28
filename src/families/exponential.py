@@ -19,12 +19,14 @@ class ExponentialMeanCoordinate(ExponentialFamilyCoordinate):
         theta = np.asarray(natural_parameter, dtype=float)
         if np.any(theta >= 0.0):
             raise ValueError("exponential natural parameter must be negative")
-        return -np.sum(np.log(-theta), axis=-1)
+        return -np.log(-theta[..., 0])
 
     def log_density(self, x, natural_parameter):
         x = self._validate_observation(x)
-        mean = self.expectation_from_natural(natural_parameter)[..., 0]
-        return -np.log(mean) - x / mean
+        theta = np.asarray(natural_parameter, dtype=float)
+        if np.any(theta >= 0.0):
+            raise ValueError("exponential natural parameter must be negative")
+        return np.log(-theta[..., 0]) + x * theta[..., 0]
 
     def expectation_from_natural(self, natural_parameter):
         theta = np.asarray(natural_parameter, dtype=float)
@@ -39,7 +41,10 @@ class ExponentialMeanCoordinate(ExponentialFamilyCoordinate):
     def dual_score(self, x, expectation_parameter):
         x = self._validate_observation(x)
         mean = self._validate_expectation(expectation_parameter)
-        return np.expand_dims(x / (mean[..., 0] * mean[..., 0]) - 1.0 / mean[..., 0], axis=-1)
+        if mean.ndim == 1:
+            return np.expand_dims(x / (mean[0] * mean[0]) - 1.0 / mean[0], axis=-1)
+        mean_value = mean[..., 0]
+        return np.expand_dims(x[..., None] / (mean_value * mean_value) - 1.0 / mean_value, axis=-1)
 
     def initial_expectation(self):
         return np.ones(self.dim, dtype=float)

@@ -17,7 +17,7 @@ class PoissonCoordinate(ExponentialFamilyCoordinate):
 
     def log_partition(self, natural_parameter):
         theta = np.asarray(natural_parameter, dtype=float)
-        return np.sum(np.exp(theta), axis=-1)
+        return np.exp(theta[..., 0])
 
     def log_density(self, x, natural_parameter):
         x = self._validate_observation(x)
@@ -35,7 +35,9 @@ class PoissonCoordinate(ExponentialFamilyCoordinate):
     def dual_score(self, x, expectation_parameter):
         x = self._validate_observation(x)
         rate = self._validate_expectation(expectation_parameter)
-        return np.expand_dims(x / rate[..., 0] - 1.0, axis=-1)
+        if rate.ndim == 1:
+            return np.expand_dims(x / rate[0] - 1.0, axis=-1)
+        return np.expand_dims(x[..., None] / rate[..., 0] - 1.0, axis=-1)
 
     def initial_expectation(self):
         return np.ones(self.dim, dtype=float)
