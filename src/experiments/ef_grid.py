@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.special import logsumexp
 
+from src.algorithms.adagrad_ef import AdaGrad_NaiveBayesEF
 from src.algorithms.dsngd_ef import DSNGD_NaiveBayesEF
 from src.algorithms.sgd_ef import SGD_NaiveBayesEF
 from src.data.ef_sample_creator import NaiveBayesEFSampleIterator
@@ -36,6 +37,7 @@ ENTROPY_SCENARIOS = (
 
 ALGORITHMS = (
     ("SGD", SGD_NaiveBayesEF),
+    ("AdaGrad", AdaGrad_NaiveBayesEF),
     ("DSNGD", DSNGD_NaiveBayesEF),
 )
 
@@ -123,6 +125,20 @@ def validation_curve(model, etas, x, y):
 
 def clipped_excess_curve(model, etas, x, y, true_nll):
     return np.maximum(validation_curve(model, etas, x, y) - true_nll, MIN_EXCESS_NLL)
+
+
+def learning_rate_columns(lr):
+    values = np.asarray(lr, dtype=float).reshape(-1)
+    if len(values) == 1:
+        return values[0], ""
+    return values[0], values[1]
+
+
+def format_learning_rate(lr):
+    values = np.asarray(lr, dtype=float).reshape(-1)
+    if len(values) == 1:
+        return f"gamma={values[0]:g}"
+    return f"a={values[0]:g}, b={values[1]:g}"
 
 
 def samples_seen(train_size, batch, iter_keep=ITER_KEEP):
@@ -229,7 +245,7 @@ def plot_grid(output_dir, output_name, x, median, lower, upper, complexity_label
 
 def save_summary(output_dir, rows):
     output_dir.mkdir(parents=True, exist_ok=True)
-    header = "family,complexity,entropy,experiment,algorithm,learning_rate_a,learning_rate_b,final_excess_nll"
+    header = "family,complexity,entropy,experiment,algorithm,learning_rate_0,learning_rate_1,final_excess_nll"
     lines = [header]
     for row in rows:
         lines.append(",".join(str(value) for value in row))
@@ -322,7 +338,7 @@ def run_grid_experiment(
                         y_lr_val=y_lr_val,
                         progress_bar=progress_bar,
                     )
-                    logging.info("Selected lr for %s: a=%g, b=%g", algorithm_name, lr[0], lr[1])
+                    logging.info("Selected lr for %s: %s", algorithm_name, format_learning_rate(lr))
                     curve = run_algorithm(
                         algorithm_class,
                         model_factory,
@@ -344,7 +360,15 @@ def run_grid_experiment(
                             (spec.key, complexity_name, entropy_name, exp_num, algorithm_name, samples, value)
                         )
                     summary_rows.append(
-                        (spec.key, complexity_name, entropy_name, exp_num, algorithm_name, lr[0], lr[1], curve[-1])
+                        (
+                            spec.key,
+                            complexity_name,
+                            entropy_name,
+                            exp_num,
+                            algorithm_name,
+                            *learning_rate_columns(lr),
+                            curve[-1],
+                        )
                     )
                     logging.info("Finished %s with final excess evaluation NLL %.6g", algorithm_name, curve[-1])
                     save_summary(output_dir, summary_rows)

@@ -6,9 +6,11 @@ import numpy as np
 
 import src.experiments.ef_grid as ef_grid
 from src.experiments.ef_grid import (
+    ALGORITHMS,
     build_model,
     build_true_model,
     collect_sample,
+    learning_rate_columns,
     samples_seen,
     validation_nll,
 )
@@ -29,6 +31,12 @@ class EFGridExperimentTests(unittest.TestCase):
         self.assertEqual([scenario[0] for scenario in spec.complexity_scenarios], ["M1", "M2", "M3"])
         self.assertEqual([scenario[1] for scenario in spec.complexity_scenarios], [10, 20, 30])
         self.assertEqual([len(scenario[2]) for scenario in spec.complexity_scenarios], [4, 8, 12])
+
+    def test_grid_algorithms_include_adagrad(self):
+        self.assertEqual([name for name, _ in ALGORITHMS], ["SGD", "AdaGrad", "DSNGD"])
+
+    def test_learning_rate_columns_supports_single_parameter_schedules(self):
+        self.assertEqual(learning_rate_columns(np.array([0.1])), (0.1, ""))
 
     def test_family_specs_build_valid_true_models_and_samples(self):
         for family_name in PURE_FAMILY_KEYS + ("mixed_repeated",):

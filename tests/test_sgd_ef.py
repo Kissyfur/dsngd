@@ -3,6 +3,7 @@ import unittest
 import numpy as np
 
 from src.algorithms.sgd import SGD_JointMLR
+from src.algorithms.adagrad_ef import AdaGrad_NaiveBayesEF
 from src.algorithms.sgd_ef import SGD_NaiveBayesEF
 from src.families import CategoricalCoordinate, ExponentialMeanCoordinate, GaussianKnownVarianceCoordinate
 from src.model.joint_mlr import JointMLR
@@ -100,6 +101,33 @@ class SGDEFTests(unittest.TestCase):
         _, final_beta_blocks = etas[-1]
         self.assertTrue(np.all(final_beta_blocks[0] < 0.0))
         self.assertEqual(final_beta_blocks[0][0, 0], -1e-6)
+
+    def test_short_generic_adagrad_run_updates_parameters(self):
+        model = NaiveBayesEF(
+            2,
+            [
+                CategoricalCoordinate(2),
+                GaussianKnownVarianceCoordinate(variance=1.0),
+            ],
+        )
+        optimizer = AdaGrad_NaiveBayesEF(model)
+        sample = [
+            (
+                np.array([[0, -1.0], [1, 1.0], [0, -0.5], [1, 0.5]]),
+                np.array([0, 1, 0, 1]),
+            )
+        ]
+
+        etas = optimizer.run(sample, model.eta, lr=[0.01], iter_keep=1)
+
+        final_alpha, final_beta_blocks = etas[-1]
+        self.assertTrue(np.all(np.isfinite(final_alpha)))
+        for block in final_beta_blocks:
+            self.assertTrue(np.all(np.isfinite(block)))
+        self.assertGreater(
+            np.linalg.norm(final_alpha) + sum(np.linalg.norm(block) for block in final_beta_blocks),
+            0.0,
+        )
 
 
 if __name__ == "__main__":

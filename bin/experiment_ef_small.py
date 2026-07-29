@@ -7,9 +7,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
+from src.algorithms.adagrad_ef import AdaGrad_NaiveBayesEF
 from src.algorithms.dsngd_ef import DSNGD_NaiveBayesEF
 from src.algorithms.sgd_ef import SGD_NaiveBayesEF
 from src.data.ef_sample_creator import NaiveBayesEFSampleIterator
+from src.experiments.ef_grid import format_learning_rate, learning_rate_columns
 from src.families import CategoricalCoordinate, GaussianKnownVarianceCoordinate
 from src.grapher import color, linestyles
 from src.model.naive_bayes_ef import NaiveBayesEF
@@ -114,11 +116,11 @@ def save_curves(samples_seen, results, true_nll):
 
     plt.figure(figsize=(7, 4.2))
     for name, result in results.items():
-        a, b = result["lr"]
+        lr_text = format_learning_rate(result["lr"])
         plt.plot(
             plot_x,
             result["curve"],
-            label=f"{name} a={a:g}, b={b:g}",
+            label=f"{name} {lr_text}",
             color=color[name],
             linestyle=linestyles[name],
         )
@@ -136,11 +138,11 @@ def save_curves(samples_seen, results, true_nll):
     plt.figure(figsize=(7, 4.2))
     for name, result in results.items():
         excess = np.maximum(result["curve"] - true_nll, 1e-8)
-        a, b = result["lr"]
+        lr_text = format_learning_rate(result["lr"])
         plt.plot(
             plot_x,
             excess,
-            label=f"{name} a={a:g}, b={b:g}",
+            label=f"{name} {lr_text}",
             color=color[name],
             linestyle=linestyles[name],
         )
@@ -156,11 +158,11 @@ def save_curves(samples_seen, results, true_nll):
 
 
 def save_summary(samples_seen, results, true_nll):
-    lines = ["algorithm,learning_rate_a,learning_rate_b,initial_nll,final_nll,true_model_nll"]
+    lines = ["algorithm,learning_rate_0,learning_rate_1,initial_nll,final_nll,true_model_nll"]
     for name, result in results.items():
-        a, b = result["lr"]
+        lr_0, lr_1 = learning_rate_columns(result["lr"])
         lines.append(
-            f"{name},{a},{b},{result['curve'][0]},{result['curve'][-1]},{true_nll}"
+            f"{name},{lr_0},{lr_1},{result['curve'][0]},{result['curve'][-1]},{true_nll}"
         )
     (OUTPUT_DIR / "summary.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
     curves = np.column_stack([samples_seen] + [result["curve"] for result in results.values()])
@@ -184,12 +186,23 @@ def main():
 
     selected_lrs = {
         "SGD": choose_best_lr(SGD_NaiveBayesEF, true_model, lr_size, batch, train_seed, x_lr_val, y_lr_val),
+        "AdaGrad": choose_best_lr(AdaGrad_NaiveBayesEF, true_model, lr_size, batch, train_seed, x_lr_val, y_lr_val),
         "DSNGD": choose_best_lr(DSNGD_NaiveBayesEF, true_model, lr_size, batch, train_seed, x_lr_val, y_lr_val),
     }
     results = {
         "SGD": run_with_selected_lr(
             SGD_NaiveBayesEF,
             selected_lrs["SGD"],
+            true_model,
+            train_size,
+            batch,
+            train_seed,
+            x_eval,
+            y_eval,
+        ),
+        "AdaGrad": run_with_selected_lr(
+            AdaGrad_NaiveBayesEF,
+            selected_lrs["AdaGrad"],
             true_model,
             train_size,
             batch,
@@ -215,9 +228,9 @@ def main():
     print(f"Saved results to {OUTPUT_DIR}")
     print(f"True model evaluation NLL: {true_nll:.6f}")
     for name, result in results.items():
-        a, b = result["lr"]
         print(
-            f"{name}: a={a:g}, b={b:g}, initial={result['curve'][0]:.6f}, final={result['curve'][-1]:.6f}"
+            f"{name}: {format_learning_rate(result['lr'])}, "
+            f"initial={result['curve'][0]:.6f}, final={result['curve'][-1]:.6f}"
         )
 
 
