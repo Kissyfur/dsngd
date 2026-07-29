@@ -1,8 +1,12 @@
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
+import src.experiments.ef_grid as ef_grid
 from src.experiments.ef_grid import (
+    EFExperimentSpec,
     FAMILY_EXPERIMENT_SPECS,
     PURE_FAMILY_KEYS,
     build_model,
@@ -46,6 +50,80 @@ class EFGridExperimentTests(unittest.TestCase):
         x_axis = samples_seen(train_size=1000, batch=100, iter_keep=4)
 
         np.testing.assert_array_equal(x_axis, np.array([0, 200, 400, 600, 800, 1000]))
+
+    def test_grid_experiment_uses_independent_lr_and_evaluation_samples(self):
+        captured = {}
+
+        def fake_collect_sample(_model, size, batch, seed):
+            return np.array([[float(seed)]]), np.array([size + batch])
+
+        def fake_choose_best_lr(
+            _algorithm_class,
+            _model_factory,
+            _true_model,
+            _lr_train_size,
+            _batch,
+            train_seed,
+            x_lr_val,
+            y_lr_val,
+            progress_bar=True,
+        ):
+            captured["lr_validation_seed"] = int(x_lr_val[0, 0])
+            captured["lr_validation_size_marker"] = int(y_lr_val[0])
+            return np.array([1.0, 1.0])
+
+        def fake_run_algorithm(
+            _algorithm_class,
+            _model_factory,
+            _true_model,
+            _lr,
+            train_size,
+            batch,
+            seed,
+            x_eval,
+            y_eval,
+            true_nll,
+            progress_bar=True,
+        ):
+            captured["evaluation_seed"] = int(x_eval[0, 0])
+            captured["evaluation_size_marker"] = int(y_eval[0])
+            return np.ones(len(samples_seen(train_size, batch)))
+
+        spec = EFExperimentSpec(
+            key="test",
+            title="Test",
+            output_name="test",
+            default_output_dir="test",
+            complexity_scenarios=(("M1", 2, (ef_grid.gaussian(),)),),
+        )
+
+        with patch.object(ef_grid, "ENTROPY_SCENARIOS", (("Entropy", 0.1),)), \
+            patch.object(ef_grid, "ALGORITHMS", (("ALG", object),)), \
+            patch.object(ef_grid, "build_true_model", return_value=SimpleNamespace(eta=None)), \
+            patch.object(ef_grid, "collect_sample", side_effect=fake_collect_sample), \
+            patch.object(ef_grid, "validation_nll", return_value=0.0), \
+            patch.object(ef_grid, "choose_best_lr", side_effect=fake_choose_best_lr), \
+            patch.object(ef_grid, "run_algorithm", side_effect=fake_run_algorithm), \
+            patch.object(ef_grid, "plot_grid"), \
+            patch.object(ef_grid, "save_summary"), \
+            patch.object(ef_grid, "save_curves"), \
+            patch.object(ef_grid.logging, "info"), \
+            patch("builtins.print"):
+            ef_grid.run_grid_experiment(
+                spec,
+                output_dir="unused",
+                train_size=100,
+                batch=10,
+                lr_size=20,
+                lr_validation_size=30,
+                eval_validation_size=100_000,
+                many_experiments=1,
+                progress_bar=False,
+            )
+
+        self.assertEqual(captured["lr_validation_size_marker"], 1030)
+        self.assertEqual(captured["evaluation_size_marker"], 101000)
+        self.assertNotEqual(captured["lr_validation_seed"], captured["evaluation_seed"])
 
 
 if __name__ == "__main__":

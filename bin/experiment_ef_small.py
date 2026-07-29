@@ -16,6 +16,8 @@ from src.model.naive_bayes_ef import NaiveBayesEF
 
 
 OUTPUT_DIR = Path("outputs") / "ef_small_comparison"
+LR_VALIDATION_SIZE = 3_000
+EVAL_VALIDATION_SIZE = 100_000
 
 
 def build_model():
@@ -124,11 +126,11 @@ def save_curves(samples_seen, results, true_nll):
     plt.xscale("log")
     plt.yscale("log")
     plt.xlabel("Samples seen")
-    plt.ylabel("Validation negative log-likelihood")
+    plt.ylabel("Evaluation negative log-likelihood")
     plt.title("Small mixed EF classification problem")
     plt.legend()
     plt.tight_layout()
-    plt.savefig(OUTPUT_DIR / "validation_nll.png", dpi=160)
+    plt.savefig(OUTPUT_DIR / "evaluation_nll.png", dpi=160)
     plt.close()
 
     plt.figure(figsize=(7, 4.2))
@@ -145,11 +147,11 @@ def save_curves(samples_seen, results, true_nll):
     plt.xscale("log")
     plt.yscale("log")
     plt.xlabel("Samples seen")
-    plt.ylabel("Validation NLL gap over true model (clipped)")
-    plt.title("Convergence on validation loss")
+    plt.ylabel("Evaluation NLL gap over true model (clipped)")
+    plt.title("Convergence on evaluation loss")
     plt.legend()
     plt.tight_layout()
-    plt.savefig(OUTPUT_DIR / "excess_validation_nll.png", dpi=160)
+    plt.savefig(OUTPUT_DIR / "excess_evaluation_nll.png", dpi=160)
     plt.close()
 
 
@@ -170,16 +172,16 @@ def main():
     true_model = build_true_model()
     train_size = 3000
     lr_size = 750
-    validation_size = 3000
     batch = 50
-    x_val, y_val = collect_sample(true_model, size=validation_size, batch=500, seed=123)
-    true_nll = validation_nll(true_model, true_model.eta, x_val, y_val)
+    x_lr_val, y_lr_val = collect_sample(true_model, size=LR_VALIDATION_SIZE, batch=500, seed=123)
+    x_eval, y_eval = collect_sample(true_model, size=EVAL_VALIDATION_SIZE, batch=1000, seed=456)
+    true_nll = validation_nll(true_model, true_model.eta, x_eval, y_eval)
     n_steps = len(NaiveBayesEFSampleIterator(true_model, epoch_length=train_size, epochs=1, batch=batch, random_seed=1))
     samples_seen = np.concatenate([np.arange(n_steps) * batch, np.array([train_size])])
 
     selected_lrs = {
-        "SGD": choose_best_lr(SGD_NaiveBayesEF, true_model, lr_size, batch, 17, x_val, y_val),
-        "DSNGD": choose_best_lr(DSNGD_NaiveBayesEF, true_model, lr_size, batch, 17, x_val, y_val),
+        "SGD": choose_best_lr(SGD_NaiveBayesEF, true_model, lr_size, batch, 17, x_lr_val, y_lr_val),
+        "DSNGD": choose_best_lr(DSNGD_NaiveBayesEF, true_model, lr_size, batch, 17, x_lr_val, y_lr_val),
     }
     results = {
         "SGD": run_with_selected_lr(
@@ -189,8 +191,8 @@ def main():
             train_size,
             batch,
             7,
-            x_val,
-            y_val,
+            x_eval,
+            y_eval,
         ),
         "DSNGD": run_with_selected_lr(
             DSNGD_NaiveBayesEF,
@@ -199,8 +201,8 @@ def main():
             train_size,
             batch,
             7,
-            x_val,
-            y_val,
+            x_eval,
+            y_eval,
         ),
     }
 
@@ -208,7 +210,7 @@ def main():
     save_summary(samples_seen, results, true_nll)
 
     print(f"Saved results to {OUTPUT_DIR}")
-    print(f"True model validation NLL: {true_nll:.6f}")
+    print(f"True model evaluation NLL: {true_nll:.6f}")
     for name, result in results.items():
         a, b = result["lr"]
         print(

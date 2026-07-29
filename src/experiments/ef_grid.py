@@ -26,6 +26,8 @@ from src.model.naive_bayes_ef import NaiveBayesEF
 
 MIN_EXCESS_NLL = 1e-10
 ITER_KEEP = 100
+DEFAULT_LR_VALIDATION_SIZE = 20_000
+DEFAULT_EVAL_VALIDATION_SIZE = 100_000
 
 ENTROPY_SCENARIOS = (
     ("High entropy", 0.1),
@@ -238,6 +240,10 @@ def collect_sample(model, size, batch, seed):
     return x, y
 
 
+def experiment_seed(base, row_index, col_index, exp_num):
+    return base + 10_000 * row_index + 100 * col_index + exp_num
+
+
 def validation_nll(model, eta, x, y):
     log_probabilities = model.log_conditional_probabilities(x, eta)
     return -float(np.mean(log_probabilities[np.arange(len(y)), y]))
@@ -270,18 +276,28 @@ def samples_seen(train_size, batch, iter_keep=ITER_KEEP):
     return np.concatenate([kept, np.array([train_size])])
 
 
-def choose_best_lr(algorithm_class, model_factory, true_model, lr_size, batch, seed, x_val, y_val, progress_bar=True):
+def choose_best_lr(
+    algorithm_class,
+    model_factory,
+    true_model,
+    lr_train_size,
+    batch,
+    train_seed,
+    x_lr_val,
+    y_lr_val,
+    progress_bar=True,
+):
     optimizer = algorithm_class(model_factory())
     data = {
         "model_factory": model_factory,
         "sample_factory": lambda: NaiveBayesEFSampleIterator(
             true_model,
-            epoch_length=lr_size,
+            epoch_length=lr_train_size,
             epochs=1,
             batch=batch,
-            random_seed=seed,
+            random_seed=train_seed,
         ),
-        "validation_curve": lambda fit_model, etas: validation_curve(fit_model, etas, x_val, y_val),
+        "validation_curve": lambda fit_model, etas: validation_curve(fit_model, etas, x_lr_val, y_lr_val),
         "iter_keep": ITER_KEEP,
         "score_tail": 5,
     }
@@ -296,8 +312,8 @@ def run_algorithm(
     train_size,
     batch,
     seed,
-    x_val,
-    y_val,
+    x_eval,
+    y_eval,
     true_nll,
     progress_bar=True,
 ):
@@ -312,7 +328,7 @@ def run_algorithm(
         verbose=progress_bar,
         desc=f"{optimizer.key} training",
     )
-    return clipped_excess_curve(model, etas, x_val, y_val, true_nll)
+    return clipped_excess_curve(model, etas, x_eval, y_eval, true_nll)
 
 
 def plot_grid(output_dir, output_name, x, median, lower, upper, complexity_labels, entropy_labels, algorithm_labels):
@@ -330,7 +346,7 @@ def plot_grid(output_dir, output_name, x, median, lower, upper, complexity_label
             if row == 0:
                 ax.set_title(entropy_labels[col])
             if col == 0:
-                ax.set_ylabel(f"{complexity_labels[row]}\nExcess validation NLL")
+                ax.set_ylabel(f"{complexity_labels[row]}\nExcess evaluation NLL")
             if row == rows - 1:
                 ax.set_xlabel("Samples seen")
 
@@ -348,7 +364,7 @@ def plot_grid(output_dir, output_name, x, median, lower, upper, complexity_label
     handles, labels = axes[0, 0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="lower center", ncol=len(algorithm_labels))
     fig.tight_layout(rect=(0, 0.05, 1, 1))
-    fig.savefig(output_dir / f"{output_name}_excess_validation_nll.png", dpi=160)
+    fig.savefig(output_dir / f"{output_name}_excess_evaluation_nll.png", dpi=160)
     plt.close(fig)
 
 
@@ -363,7 +379,7 @@ def save_summary(output_dir, rows):
 
 def save_curves(output_dir, rows):
     output_dir.mkdir(parents=True, exist_ok=True)
-    header = "family,complexity,entropy,experiment,algorithm,samples_seen,excess_validation_nll"
+    header = "family,complexity,entropy,experiment,algorithm,samples_seen,excess_evaluation_nll"
     lines = [header]
     for row in rows:
         lines.append(",".join(str(value) for value in row))
@@ -376,10 +392,15 @@ def run_grid_experiment(
     train_size=10_000_000,
     batch=250,
     lr_size=500 * 250,
-    validation_size=20_000,
+    validation_size=None,
     many_experiments=1,
     progress_bar=True,
+    lr_validation_size=DEFAULT_LR_VALIDATION_SIZE,
+    eval_validation_size=DEFAULT_EVAL_VALIDATION_SIZE,
 ):
+    if validation_size is not None:
+        eval_validation_size = validation_size
+
     if output_dir is None:
         output_dir = Path("outputs") / spec.default_output_dir
     else:
@@ -409,11 +430,22 @@ def run_grid_experiment(
                     many_classes,
                     family_factories,
                     sigma,
-                    seed=10_000 * row_index + 100 * col_index + exp_num,
+                    seed=experiment_seed(0, row_index, col_index, exp_num),
                 )
-                x_val, y_val = collect_sample(true_model, validation_size, batch=1000, seed=20_000 + exp_num)
-                true_nll = validation_nll(true_model, true_model.eta, x_val, y_val)
-                logging.info("True model validation NLL: %.6f", true_nll)
+                x_lr_val, y_lr_val = collect_sample(
+                    true_model,
+                    lr_validation_size,
+                    batch=1000,
+                    seed=experiment_seed(20_000, row_index, col_index, exp_num),
+                )
+                x_eval, y_eval = collect_sample(
+                    true_model,
+                    eval_validation_size,
+                    batch=1000,
+                    seed=experiment_seed(40_000, row_index, col_index, exp_num),
+                )
+                true_nll = validation_nll(true_model, true_model.eta, x_eval, y_eval)
+                logging.info("True model evaluation NLL on %s samples: %.6f", eval_validation_size, true_nll)
 
                 for algorithm_name, algorithm_class in ALGORITHMS:
                     logging.info("Algorithm: %s", algorithm_name)
@@ -423,9 +455,9 @@ def run_grid_experiment(
                         true_model,
                         lr_size,
                         batch,
-                        seed=30_000 + exp_num,
-                        x_val=x_val,
-                        y_val=y_val,
+                        train_seed=experiment_seed(60_000, row_index, col_index, exp_num),
+                        x_lr_val=x_lr_val,
+                        y_lr_val=y_lr_val,
                         progress_bar=progress_bar,
                     )
                     logging.info("Selected lr for %s: a=%g, b=%g", algorithm_name, lr[0], lr[1])
@@ -436,9 +468,9 @@ def run_grid_experiment(
                         lr,
                         train_size,
                         batch,
-                        seed=40_000 + exp_num,
-                        x_val=x_val,
-                        y_val=y_val,
+                        seed=experiment_seed(80_000, row_index, col_index, exp_num),
+                        x_eval=x_eval,
+                        y_eval=y_eval,
                         true_nll=true_nll,
                         progress_bar=progress_bar,
                     )
@@ -452,7 +484,7 @@ def run_grid_experiment(
                     summary_rows.append(
                         (spec.key, complexity_name, entropy_name, exp_num, algorithm_name, lr[0], lr[1], curve[-1])
                     )
-                    logging.info("Finished %s with final excess validation NLL %.6g", algorithm_name, curve[-1])
+                    logging.info("Finished %s with final excess evaluation NLL %.6g", algorithm_name, curve[-1])
                     save_summary(output_dir, summary_rows)
                     save_curves(output_dir, curve_rows)
 
