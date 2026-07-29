@@ -400,6 +400,8 @@ def run_grid_experiment(
 ):
     if validation_size is not None:
         eval_validation_size = validation_size
+    if lr_size > train_size:
+        raise ValueError("lr_size must be no larger than train_size because LR search uses the training prefix")
 
     if output_dir is None:
         output_dir = Path("outputs") / spec.default_output_dir
@@ -446,6 +448,7 @@ def run_grid_experiment(
                 )
                 true_nll = validation_nll(true_model, true_model.eta, x_eval, y_eval)
                 logging.info("True model evaluation NLL on %s samples: %.6f", eval_validation_size, true_nll)
+                train_seed = experiment_seed(60_000, row_index, col_index, exp_num)
 
                 for algorithm_name, algorithm_class in ALGORITHMS:
                     logging.info("Algorithm: %s", algorithm_name)
@@ -455,7 +458,7 @@ def run_grid_experiment(
                         true_model,
                         lr_size,
                         batch,
-                        train_seed=experiment_seed(60_000, row_index, col_index, exp_num),
+                        train_seed=train_seed,
                         x_lr_val=x_lr_val,
                         y_lr_val=y_lr_val,
                         progress_bar=progress_bar,
@@ -468,7 +471,7 @@ def run_grid_experiment(
                         lr,
                         train_size,
                         batch,
-                        seed=experiment_seed(80_000, row_index, col_index, exp_num),
+                        seed=train_seed,
                         x_eval=x_eval,
                         y_eval=y_eval,
                         true_nll=true_nll,

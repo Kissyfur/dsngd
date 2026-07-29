@@ -68,6 +68,7 @@ class EFGridExperimentTests(unittest.TestCase):
             y_lr_val,
             progress_bar=True,
         ):
+            captured["lr_train_seed"] = train_seed
             captured["lr_validation_seed"] = int(x_lr_val[0, 0])
             captured["lr_validation_size_marker"] = int(y_lr_val[0])
             return np.array([1.0, 1.0])
@@ -85,6 +86,7 @@ class EFGridExperimentTests(unittest.TestCase):
             true_nll,
             progress_bar=True,
         ):
+            captured["final_train_seed"] = seed
             captured["evaluation_seed"] = int(x_eval[0, 0])
             captured["evaluation_size_marker"] = int(y_eval[0])
             return np.ones(len(samples_seen(train_size, batch)))
@@ -123,7 +125,26 @@ class EFGridExperimentTests(unittest.TestCase):
 
         self.assertEqual(captured["lr_validation_size_marker"], 1030)
         self.assertEqual(captured["evaluation_size_marker"], 101000)
+        self.assertEqual(captured["lr_train_seed"], captured["final_train_seed"])
         self.assertNotEqual(captured["lr_validation_seed"], captured["evaluation_seed"])
+
+    def test_grid_experiment_rejects_lr_search_longer_than_training(self):
+        spec = EFExperimentSpec(
+            key="test",
+            title="Test",
+            output_name="test",
+            default_output_dir="test",
+            complexity_scenarios=(("M1", 2, (ef_grid.gaussian(),)),),
+        )
+
+        with self.assertRaisesRegex(ValueError, "training prefix"):
+            ef_grid.run_grid_experiment(
+                spec,
+                output_dir="unused",
+                train_size=100,
+                lr_size=101,
+                progress_bar=False,
+            )
 
 
 if __name__ == "__main__":

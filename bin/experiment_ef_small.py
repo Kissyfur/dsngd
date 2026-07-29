@@ -173,6 +173,9 @@ def main():
     train_size = 3000
     lr_size = 750
     batch = 50
+    if lr_size > train_size:
+        raise ValueError("lr_size must be no larger than train_size because LR search uses the training prefix")
+    train_seed = 7
     x_lr_val, y_lr_val = collect_sample(true_model, size=LR_VALIDATION_SIZE, batch=500, seed=123)
     x_eval, y_eval = collect_sample(true_model, size=EVAL_VALIDATION_SIZE, batch=1000, seed=456)
     true_nll = validation_nll(true_model, true_model.eta, x_eval, y_eval)
@@ -180,8 +183,8 @@ def main():
     samples_seen = np.concatenate([np.arange(n_steps) * batch, np.array([train_size])])
 
     selected_lrs = {
-        "SGD": choose_best_lr(SGD_NaiveBayesEF, true_model, lr_size, batch, 17, x_lr_val, y_lr_val),
-        "DSNGD": choose_best_lr(DSNGD_NaiveBayesEF, true_model, lr_size, batch, 17, x_lr_val, y_lr_val),
+        "SGD": choose_best_lr(SGD_NaiveBayesEF, true_model, lr_size, batch, train_seed, x_lr_val, y_lr_val),
+        "DSNGD": choose_best_lr(DSNGD_NaiveBayesEF, true_model, lr_size, batch, train_seed, x_lr_val, y_lr_val),
     }
     results = {
         "SGD": run_with_selected_lr(
@@ -190,7 +193,7 @@ def main():
             true_model,
             train_size,
             batch,
-            7,
+            train_seed,
             x_eval,
             y_eval,
         ),
@@ -200,7 +203,7 @@ def main():
             true_model,
             train_size,
             batch,
-            7,
+            train_seed,
             x_eval,
             y_eval,
         ),
