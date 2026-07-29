@@ -15,7 +15,7 @@ class LineSearch:
     def run(self, sample, starting_point, lr, iter_keep, **kwargs):
         param = starting_point
         params = []
-        length = len(sample) // iter_keep
+        length = max(len(sample) // iter_keep, 1)
         for it, obs in enumerate(sample):
             if it % length == 0:
                 params.append(param.copy())

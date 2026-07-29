@@ -72,5 +72,17 @@ with:
 python bin/experiment_ef_small.py
 ```
 
-The script writes validation-loss plots and CSV summaries to
+The script writes evaluation-loss plots and CSV summaries to
 `outputs/ef_small_comparison/`.
+
+Run the 3x3 exponential-family grids with:
+
+```bash
+python bin/experiment_ef_family.py gaussian
+python bin/experiment_ef_mixed.py
+python bin/experiment_ef_mixed_repeated.py
+```
+
+Experiment definitions live in `src/experiments/ef_specs.py`; the shared runner,
+learning-rate search, independent evaluation split, CSV output, and plotting live
+in `src/experiments/ef_grid.py`.

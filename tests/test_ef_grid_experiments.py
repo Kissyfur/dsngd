@@ -6,15 +6,13 @@ import numpy as np
 
 import src.experiments.ef_grid as ef_grid
 from src.experiments.ef_grid import (
-    EFExperimentSpec,
-    FAMILY_EXPERIMENT_SPECS,
-    PURE_FAMILY_KEYS,
     build_model,
     build_true_model,
     collect_sample,
     samples_seen,
     validation_nll,
 )
+from src.experiments.ef_specs import EFExperimentSpec, FAMILY_EXPERIMENT_SPECS, PURE_FAMILY_KEYS, gaussian
 
 
 class EFGridExperimentTests(unittest.TestCase):
@@ -96,7 +94,7 @@ class EFGridExperimentTests(unittest.TestCase):
             title="Test",
             output_name="test",
             default_output_dir="test",
-            complexity_scenarios=(("M1", 2, (ef_grid.gaussian(),)),),
+            complexity_scenarios=(("M1", 2, (gaussian(),)),),
         )
 
         with patch.object(ef_grid, "ENTROPY_SCENARIOS", (("Entropy", 0.1),)), \
@@ -134,7 +132,7 @@ class EFGridExperimentTests(unittest.TestCase):
             title="Test",
             output_name="test",
             default_output_dir="test",
-            complexity_scenarios=(("M1", 2, (ef_grid.gaussian(),)),),
+            complexity_scenarios=(("M1", 2, (gaussian(),)),),
         )
 
         with self.assertRaisesRegex(ValueError, "training prefix"):

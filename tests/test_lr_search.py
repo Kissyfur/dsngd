@@ -4,6 +4,7 @@ import unittest
 
 import numpy as np
 
+from src.algorithms import LineSearch
 from src.algorithms.sgd_ef import SGD_NaiveBayesEF
 from src.data.ef_sample_creator import NaiveBayesEFSampleIterator
 from src.families import CategoricalCoordinate, GaussianKnownVarianceCoordinate
@@ -20,6 +21,14 @@ def validation_nll(model, eta, x, y):
 
 
 class LearningRateSearchTests(unittest.TestCase):
+    def test_base_line_search_handles_large_iter_keep(self):
+        optimizer = LineSearch(lambda _obs, param: np.zeros_like(param))
+        sample = [0, 1, 2]
+
+        etas = optimizer.run(sample, np.array([1.0]), lr=np.array([0.1, 1.0]), iter_keep=100)
+
+        self.assertEqual(len(etas), len(sample))
+
     def test_adjust_lr_with_data_works_for_generic_ef_optimizers(self):
         true_model = build_model()
         true_model.set_eta((np.array([0.0]), [np.array([[0.3, -0.1]]), np.array([[-0.5, 0.5]])]))

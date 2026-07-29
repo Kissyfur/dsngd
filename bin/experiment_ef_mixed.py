@@ -1,7 +1,8 @@
 import logging
 from pathlib import Path
 
-from src.experiments.ef_grid import FAMILY_EXPERIMENT_SPECS, run_grid_experiment
+from src.experiments.ef_grid import run_grid_experiment
+from src.experiments.ef_specs import FAMILY_EXPERIMENT_SPECS
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")

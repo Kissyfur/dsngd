@@ -5,10 +5,9 @@ from pathlib import Path
 from src.experiments.ef_grid import (
     DEFAULT_EVAL_VALIDATION_SIZE,
     DEFAULT_LR_VALIDATION_SIZE,
-    FAMILY_EXPERIMENT_SPECS,
-    PURE_FAMILY_KEYS,
     run_grid_experiment,
 )
+from src.experiments.ef_specs import FAMILY_EXPERIMENT_SPECS, PURE_FAMILY_KEYS
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
