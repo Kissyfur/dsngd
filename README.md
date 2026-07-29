@@ -85,6 +85,17 @@ python bin/experiment_ef_mixed.py
 python bin/experiment_ef_mixed_repeated.py
 ```
 
+Prepare and run a first real-data MNIST experiment with:
+
+```bash
+python bin/experiment_ef_mnist.py --feature-family gaussian
+```
+
+The script downloads MNIST into `saved_data/mnist/` when needed. Current
+per-pixel feature-family choices are `gaussian`, `binary-categorical`, and
+`poisson`; this keeps the real-data experiment ready for richer families such as
+a multivariate Gaussian later.
+
 Experiment definitions live in `src/experiments/ef_specs.py`; the shared runner,
 learning-rate search, independent evaluation split, CSV output, and plotting live
 in `src/experiments/ef_grid.py`.
