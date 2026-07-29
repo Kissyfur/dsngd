@@ -44,7 +44,7 @@ def parse_args():
     parser.add_argument("--lr-validation-size", type=int, default=10_000)
     parser.add_argument("--eval-size", type=int, default=None, help="Evaluation samples from the MNIST test split.")
     parser.add_argument("--batch", type=int, default=250)
-    parser.add_argument("--epochs", type=int, default=1)
+    parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--no-progress", action="store_true")
     parser.add_argument("--no-download", action="store_true")
