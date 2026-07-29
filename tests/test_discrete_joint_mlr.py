@@ -34,6 +34,17 @@ class JointMLRDiscreteSmokeTests(unittest.TestCase):
         self.assertTrue(np.all((0 <= x[:, 0]) & (x[:, 0] < 2)))
         self.assertTrue(np.all((0 <= x[:, 1]) & (x[:, 1] < 3)))
 
+    def test_sample_iterator_reports_partial_final_batch(self):
+        problem = JointMLR(3, [2, 3])
+        np.random.seed(11)
+        problem.set_random_eta(0.5)
+
+        sample = JointMLRSampleIterator(problem, epoch_length=10, epochs=1, batch=4, random_seed=3)
+        batches = list(sample)
+
+        self.assertEqual(len(sample), 3)
+        self.assertEqual([len(y) for _, y in batches], [4, 4, 2])
+
     def test_dsngd_direction_has_expected_shapes(self):
         model = JointMLR(3, [2, 3])
         optimizer = DSNGD_JointMLR(model)

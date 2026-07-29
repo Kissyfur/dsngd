@@ -27,6 +27,13 @@ class ArrayBatchIteratorTests(unittest.TestCase):
 
         np.testing.assert_array_equal(short_x, long_x[: len(short_x)])
 
+    def test_rejects_invalid_batch_settings(self):
+        x = np.arange(10).reshape(5, 2)
+        y = np.arange(5)
+
+        with self.assertRaisesRegex(ValueError, "batch"):
+            ArrayBatchIterator(x, y, batch=0)
+
 
 if __name__ == "__main__":
     unittest.main()
