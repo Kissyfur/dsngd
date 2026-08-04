@@ -1,7 +1,7 @@
 import numpy as np
 
 
-from src.algorithms import LineSearch
+from src.algorithms import LineSearch, log_spaced_checkpoint_iterations
 from src.model.joint_mlr import JointMLR
 from tqdm import tqdm
 
@@ -54,10 +54,10 @@ class DSNGD_JointMLR(LineSearch):
         # beta_dual = np.zeros((np.sum(self.model.T.m), self.model.S.many_values)) + 0.1
         alpha_dual, beta_dual = self.max_entropy_dual_parameter()
         etas = []
-        length = max(len(sample) // iter_keep, 1)
+        checkpoints = set(log_spaced_checkpoint_iterations(len(sample), iter_keep))
         s = tqdm(enumerate(sample), total=len(sample)) if verbose else enumerate(sample)
         for it, obs in s:
-            if it % length == 0:
+            if it in checkpoints:
                 etas.append([alpha.copy(), beta.copy()])
             ng_alpha, ng_beta = self.director_process(obs, (alpha, beta), (alpha_dual, beta_dual))
             r = self.lr_update(it, lr)

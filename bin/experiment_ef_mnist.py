@@ -14,6 +14,7 @@ from src.data.mnist import load_mnist
 from src.experiments.ef_grid import (
     ALGORITHMS,
     ITER_KEEP,
+    checkpoint_samples_seen,
     format_learning_rate,
     learning_rate_columns,
     validation_curve,
@@ -339,13 +340,7 @@ def main():
 
 
 def real_samples_seen(train_size, batch, epochs, iter_keep=ITER_KEEP):
-    if train_size <= 0 or batch <= 0 or epochs <= 0:
-        raise ValueError("train_size, batch, and epochs must be positive")
-    effective_batch = batch if batch < train_size else train_size
-    total_batches = epochs * int(np.ceil(train_size / effective_batch))
-    stride = max(total_batches // iter_keep, 1)
-    kept = np.arange(0, total_batches, stride) * effective_batch
-    return np.concatenate([np.minimum(kept, train_size * epochs), np.array([train_size * epochs])])
+    return checkpoint_samples_seen(train_size, batch, epochs=epochs, iter_keep=iter_keep)
 
 
 if __name__ == "__main__":

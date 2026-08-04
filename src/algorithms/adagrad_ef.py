@@ -1,6 +1,7 @@
 import numpy as np
 from tqdm import tqdm
 
+from src.algorithms import log_spaced_checkpoint_iterations
 from src.algorithms.sgd_ef import SGD_NaiveBayesEF
 from src.model.naive_bayes_ef import NaiveBayesEF
 
@@ -33,12 +34,12 @@ class AdaGrad_NaiveBayesEF(SGD_NaiveBayesEF):
             [np.zeros_like(block) for block in beta_blocks],
         ]
         etas = []
-        length = max(len(sample) // iter_keep, 1)
+        checkpoints = set(log_spaced_checkpoint_iterations(len(sample), iter_keep))
         desc = kwargs.get("desc", self.key)
         iterator = tqdm(enumerate(sample), total=len(sample), desc=desc) if verbose else enumerate(sample)
 
         for it, obs in iterator:
-            if it % length == 0:
+            if it in checkpoints:
                 etas.append([alpha.copy(), [block.copy() for block in beta_blocks]])
             grad_alpha, grad_beta_blocks = self.director_process(obs, (alpha, beta_blocks))
             gradient_squares[0] += grad_alpha * grad_alpha

@@ -1,7 +1,7 @@
 import numpy as np
 
 from src.model.joint_mlr import JointMLR
-from src.algorithms import LineSearch
+from src.algorithms import LineSearch, log_spaced_checkpoint_iterations
 from tqdm import tqdm
 
 
@@ -23,10 +23,10 @@ class SGD_JointMLR(LineSearch):
     def run(self, sample, starting_point, lr, iter_keep=100, verbose=False, **kwargs):
         alpha, beta = starting_point
         etas = []
-        length = max(len(sample) // iter_keep, 1)
+        checkpoints = set(log_spaced_checkpoint_iterations(len(sample), iter_keep))
         s = tqdm(enumerate(sample), total=len(sample)) if verbose else enumerate(sample)
         for it, obs in s:
-            if it % length == 0:
+            if it in checkpoints:
                 etas.append([alpha.copy(), beta.copy()])
             g_alpha, g_beta = self.director_process(obs, (alpha, beta))
             r = self.lr_update(it, lr)
