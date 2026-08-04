@@ -4,7 +4,13 @@ import numpy as np
 
 from src.algorithms.dsngd_ef import DSNGD_NaiveBayesEF
 from src.data.ef_sample_creator import NaiveBayesEFSampleIterator
-from src.families import CategoricalCoordinate, ExponentialMeanCoordinate, GaussianKnownVarianceCoordinate
+from src.families import (
+    CategoricalCoordinate,
+    ExponentialMeanCoordinate,
+    GaussianKnownVarianceCoordinate,
+    GaussianUnknownVarianceCoordinate,
+    MultivariateGaussianCoordinate,
+)
 from src.model.naive_bayes_ef import NaiveBayesEF
 
 
@@ -20,6 +26,36 @@ class ContinuousEFIntegrationTests(unittest.TestCase):
         self.assertEqual(probabilities.shape, (3, 2))
         np.testing.assert_allclose(np.sum(probabilities, axis=1), 1.0)
         self.assertTrue(np.all(probabilities > 0.0))
+
+    def test_gaussian_unknown_variance_model_posteriors_are_normalized(self):
+        family = GaussianUnknownVarianceCoordinate()
+        model = NaiveBayesEF(2, [family])
+        expectations = (np.array([-1.0, 2.0]), np.array([1.0, 2.0]))
+        beta = [np.column_stack([family.natural_from_expectation(expectation) for expectation in expectations])]
+        model.set_eta((np.array([0.0]), beta))
+
+        probabilities = model.conditional_probabilities(np.array([[-2.0], [0.0], [2.0]]))
+
+        self.assertEqual(probabilities.shape, (3, 2))
+        np.testing.assert_allclose(np.sum(probabilities, axis=1), 1.0)
+        self.assertTrue(np.all(probabilities > 0.0))
+
+    def test_multivariate_gaussian_model_uses_one_family_over_multiple_columns(self):
+        family = MultivariateGaussianCoordinate(2)
+        model = NaiveBayesEF(2, [family])
+        expectations = (
+            family.initial_expectation(),
+            np.array([1.0, -1.0, 2.0, -1.0, -1.0, 2.0]),
+        )
+        beta = [np.column_stack([family.natural_from_expectation(expectation) for expectation in expectations])]
+        model.set_eta((np.array([0.0]), beta))
+
+        probabilities = model.conditional_probabilities(np.array([[0.0, 0.0], [1.0, -1.0], [2.0, -2.0]]))
+
+        self.assertEqual(model.observation_dim, 2)
+        self.assertEqual(model.feature_dim, family.dim)
+        self.assertEqual(probabilities.shape, (3, 2))
+        np.testing.assert_allclose(np.sum(probabilities, axis=1), 1.0)
 
     def test_mixed_categorical_gaussian_dsngd_direction_is_finite(self):
         model = NaiveBayesEF(
@@ -134,6 +170,32 @@ class ContinuousEFIntegrationTests(unittest.TestCase):
         final_alpha, final_beta_blocks = etas[-1]
         self.assertTrue(np.all(np.isfinite(final_alpha)))
         self.assertTrue(np.all(np.isfinite(final_beta_blocks[0])))
+
+    def test_multivariate_gaussian_runs_through_generic_sampler_and_dsngd(self):
+        family = MultivariateGaussianCoordinate(2)
+        true_model = NaiveBayesEF(2, [family])
+        expectations = (
+            family.initial_expectation(),
+            np.array([0.5, -0.5, 1.25, -0.25, -0.25, 1.25]),
+        )
+        true_model.set_eta(
+            (
+                np.array([0.1]),
+                [np.column_stack([family.natural_from_expectation(expectation) for expectation in expectations])],
+            )
+        )
+        fit_model = NaiveBayesEF(2, [MultivariateGaussianCoordinate(2)])
+        optimizer = DSNGD_NaiveBayesEF(fit_model)
+        sample = NaiveBayesEFSampleIterator(true_model, epoch_length=12, epochs=1, batch=4, random_seed=9)
+
+        batches = list(sample)
+        self.assertEqual(batches[0][0].shape, (4, 2))
+        etas = optimizer.run(batches, fit_model.eta, lr=[0.001, 0.0], iter_keep=2)
+
+        final_alpha, final_beta_blocks = etas[-1]
+        self.assertTrue(np.all(np.isfinite(final_alpha)))
+        for block in final_beta_blocks:
+            self.assertTrue(np.all(np.isfinite(block)))
 
 
 if __name__ == "__main__":

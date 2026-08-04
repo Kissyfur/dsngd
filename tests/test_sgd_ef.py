@@ -5,7 +5,12 @@ import numpy as np
 from src.algorithms.sgd import SGD_JointMLR
 from src.algorithms.adagrad_ef import AdaGrad_NaiveBayesEF
 from src.algorithms.sgd_ef import SGD_NaiveBayesEF
-from src.families import CategoricalCoordinate, ExponentialMeanCoordinate, GaussianKnownVarianceCoordinate
+from src.families import (
+    CategoricalCoordinate,
+    ExponentialMeanCoordinate,
+    GaussianKnownVarianceCoordinate,
+    MultivariateGaussianCoordinate,
+)
 from src.model.joint_mlr import JointMLR
 from src.model.naive_bayes_ef import NaiveBayesEF
 
@@ -128,6 +133,21 @@ class SGDEFTests(unittest.TestCase):
             np.linalg.norm(final_alpha) + sum(np.linalg.norm(block) for block in final_beta_blocks),
             0.0,
         )
+
+    def test_sgd_gradient_accepts_multivariate_gaussian_block(self):
+        model = NaiveBayesEF(2, [MultivariateGaussianCoordinate(2)])
+        optimizer = SGD_NaiveBayesEF(model)
+        sample = (
+            np.array([[0.0, 0.0], [1.0, -1.0], [0.5, 0.25]]),
+            np.array([0, 1, 0]),
+        )
+
+        grad_alpha, grad_beta_blocks = optimizer.gradient_log_conditional_probability(sample, model.eta)
+
+        self.assertEqual(grad_alpha.shape, model.alpha.shape)
+        self.assertEqual(grad_beta_blocks[0].shape, model.beta_blocks[0].shape)
+        self.assertTrue(np.all(np.isfinite(grad_alpha)))
+        self.assertTrue(np.all(np.isfinite(grad_beta_blocks[0])))
 
 
 if __name__ == "__main__":

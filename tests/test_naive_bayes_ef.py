@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from src.families import CategoricalCoordinate
+from src.families import CategoricalCoordinate, MultivariateGaussianCoordinate
 from src.model.joint_mlr import JointMLR
 from src.model.naive_bayes_ef import NaiveBayesEF
 
@@ -48,6 +48,14 @@ class NaiveBayesEFTests(unittest.TestCase):
         self.assertEqual(beta_dual_blocks[1].shape, (2, 4))
         self.assertTrue(np.all(beta_dual_blocks[0] > 0.0))
         self.assertTrue(np.all(beta_dual_blocks[1] > 0.0))
+
+    def test_multivariate_family_has_separate_observation_and_parameter_dimensions(self):
+        family = MultivariateGaussianCoordinate(3)
+        model = NaiveBayesEF(2, [CategoricalCoordinate(2), family])
+
+        self.assertEqual(model.observation_dim, 4)
+        self.assertEqual(model.feature_dim, 1 + family.dim)
+        self.assertEqual(model.parameter_dim, model.alpha.size + model.many_classes * model.feature_dim)
 
 
 if __name__ == "__main__":

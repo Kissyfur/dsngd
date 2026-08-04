@@ -25,14 +25,15 @@ class NaiveBayesEFSampleIterator(BatchedIterator):
 
     def _sample_batch(self, batch_size):
         y = self.rng.choice(self.model.many_classes, size=batch_size, p=self._class_probabilities)
-        x = np.zeros((batch_size, len(self.model.families)), dtype=float)
+        x = np.zeros((batch_size, self.model.observation_dim), dtype=float)
 
         for class_index in range(self.model.many_classes):
             rows = np.nonzero(y == class_index)[0]
             if len(rows) == 0:
                 continue
-            for feature_index, family in enumerate(self.model.families):
+            for feature_index, (family, columns) in enumerate(self.model.family_slices()):
                 expectation = self._expectation_blocks[feature_index][class_index]
-                x[rows, feature_index] = family.sample(expectation, self.rng, size=len(rows))
+                draws = np.asarray(family.sample(expectation, self.rng, size=len(rows)), dtype=float)
+                x[rows, columns] = draws.reshape(len(rows), family.input_dim)
 
         return x, y

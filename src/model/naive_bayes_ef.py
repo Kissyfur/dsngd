@@ -30,6 +30,10 @@ class NaiveBayesEF:
         return sum(family.dim for family in self.families)
 
     @property
+    def observation_dim(self):
+        return sum(family.input_dim for family in self.families)
+
+    @property
     def parameter_dim(self):
         return self.alpha.size + self.many_classes * self.feature_dim
 
@@ -61,7 +65,7 @@ class NaiveBayesEF:
         return (
             np.asarray(alpha, dtype=float),
             [
-                family.project_natural(np.asarray(block, dtype=float))
+                family.project_natural(np.asarray(block, dtype=float).T).T
                 for family, block in zip(self.families, beta_blocks)
             ],
         )
@@ -87,8 +91,8 @@ class NaiveBayesEF:
         log_probabilities = np.empty((len(x), self.many_classes), dtype=float)
         log_probabilities[:, :-1] = alpha
         log_probabilities[:, -1] = 0.0
-        for feature_index, (family, block) in enumerate(zip(self.families, beta_blocks)):
-            statistics = family.sufficient_statistic(x[:, feature_index])
+        for (family, observations), block in zip(self.family_observations(x), beta_blocks):
+            statistics = family.sufficient_statistic(observations)
             log_probabilities += statistics @ block
         normalizer = logsumexp(log_probabilities, axis=1, keepdims=True)
         return log_probabilities - normalizer
@@ -117,6 +121,21 @@ class NaiveBayesEF:
         x = np.asarray(x)
         if x.ndim == 1:
             x = x.reshape(1, -1)
-        if x.ndim != 2 or x.shape[1] != len(self.families):
-            raise ValueError(f"expected feature matrix with {len(self.families)} columns")
+        if x.ndim != 2 or x.shape[1] != self.observation_dim:
+            raise ValueError(f"expected feature matrix with {self.observation_dim} columns")
         return x
+
+    def family_slices(self):
+        start = 0
+        for family in self.families:
+            end = start + family.input_dim
+            yield family, slice(start, end)
+            start = end
+
+    def family_observations(self, x):
+        x = self._as_feature_matrix(x)
+        for family, columns in self.family_slices():
+            observations = x[:, columns]
+            if family.input_dim == 1:
+                observations = observations[:, 0]
+            yield family, observations

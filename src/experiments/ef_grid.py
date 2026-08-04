@@ -18,6 +18,8 @@ from src.families import (
     CategoricalCoordinate,
     ExponentialMeanCoordinate,
     GaussianKnownVarianceCoordinate,
+    GaussianUnknownVarianceCoordinate,
+    MultivariateGaussianCoordinate,
     PoissonCoordinate,
 )
 from src.grapher import color, linestyles
@@ -66,6 +68,17 @@ def random_expectation(family, rng, sigma):
         return random_categorical_expectation(family, rng, sigma)
     if isinstance(family, GaussianKnownVarianceCoordinate):
         return rng.normal(0.0, sigma, size=family.dim)
+    if isinstance(family, GaussianUnknownVarianceCoordinate):
+        mean = rng.normal(0.0, sigma)
+        variance = np.exp(rng.normal(0.0, sigma))
+        return np.array([mean, mean * mean + variance], dtype=float)
+    if isinstance(family, MultivariateGaussianCoordinate):
+        mean = rng.normal(0.0, sigma, size=family.event_dim)
+        diagonal = np.diag(np.exp(rng.normal(0.0, sigma, size=family.event_dim)))
+        factors = rng.normal(0.0, sigma / np.sqrt(family.event_dim), size=(family.event_dim, family.event_dim))
+        covariance = diagonal + factors @ factors.T
+        second = covariance + mean[:, None] * mean[None, :]
+        return np.concatenate((mean, second.reshape(-1)))
     if isinstance(family, PoissonCoordinate):
         return np.exp(rng.normal(0.0, sigma, size=family.dim))
     if isinstance(family, ExponentialMeanCoordinate):

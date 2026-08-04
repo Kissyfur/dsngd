@@ -21,8 +21,8 @@ class SGD_NaiveBayesEF(LineSearch):
 
         grad_alpha = np.sum(q_minus_e[:, :-1], axis=0)
         grad_beta_blocks = [
-            family.sufficient_statistic(x[:, feature_index]).T @ q_minus_e
-            for feature_index, family in enumerate(self.model.families)
+            family.sufficient_statistic(observations).T @ q_minus_e
+            for family, observations in self.model.family_observations(x)
         ]
         return grad_alpha, grad_beta_blocks
 

@@ -2,10 +2,15 @@ from abc import ABC, abstractmethod
 
 
 class ExponentialFamilyCoordinate(ABC):
-    """One coordinate of a Naive Bayes exponential-family feature vector."""
+    """One coordinate block of a Naive Bayes exponential-family feature vector."""
 
-    def __init__(self, dim):
+    def __init__(self, dim, input_dim=1):
         self.dim = int(dim)
+        self.input_dim = int(input_dim)
+        if self.dim <= 0:
+            raise ValueError("dim must be positive")
+        if self.input_dim <= 0:
+            raise ValueError("input_dim must be positive")
 
     @abstractmethod
     def sufficient_statistic(self, x):

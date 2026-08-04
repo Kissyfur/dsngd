@@ -38,8 +38,8 @@ class EmpiricalSufficientStatisticDual:
             return dual_parameter
 
         class_indicators = np.eye(model.many_classes)[y]
-        for feature_index, (family, block) in enumerate(zip(model.families, beta_dual_blocks)):
-            statistics = family.sufficient_statistic(x[:, feature_index])
+        for (family, observations), block in zip(model.family_observations(x), beta_dual_blocks):
+            statistics = family.sufficient_statistic(observations)
             block += statistics.T @ class_indicators
         return dual_parameter
 
@@ -51,7 +51,10 @@ class DSNGD_NaiveBayesEF(LineSearch):
         super(DSNGD_NaiveBayesEF, self).__init__(self.approx_natural_gradient_log_conditional_probability, name)
         self.model = model
         self.dual_parametrization = dual_parametrization or EmpiricalSufficientStatisticDual()
-        self._all_categorical = all(isinstance(family, CategoricalCoordinate) for family in self.model.families)
+        self._all_categorical = all(
+            isinstance(family, CategoricalCoordinate) and family.input_dim == 1
+            for family in self.model.families
+        )
 
     def clone_for_model(self, model):
         return type(self)(
@@ -84,8 +87,8 @@ class DSNGD_NaiveBayesEF(LineSearch):
 
         v = np.ones_like(q_minus_e)
         feature_scores = []
-        for feature_index, (family, theta_star_block) in enumerate(zip(self.model.families, theta_star_blocks)):
-            scores = family.dual_score(x[:, feature_index], theta_star_block.T)
+        for (family, observations), theta_star_block in zip(self.model.family_observations(x), theta_star_blocks):
+            scores = family.dual_score(observations, theta_star_block.T)
             feature_scores.append(scores)
             v -= np.einsum("cd,ncd->nc", theta_star_block.T, scores)
 

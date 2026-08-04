@@ -18,7 +18,13 @@ from src.experiments.ef_grid import (
     learning_rate_columns,
     validation_curve,
 )
-from src.families import CategoricalCoordinate, GaussianKnownVarianceCoordinate, PoissonCoordinate
+from src.families import (
+    CategoricalCoordinate,
+    GaussianKnownVarianceCoordinate,
+    GaussianUnknownVarianceCoordinate,
+    MultivariateGaussianCoordinate,
+    PoissonCoordinate,
+)
 from src.grapher import color, linestyles
 from src.model.naive_bayes_ef import NaiveBayesEF
 
@@ -32,7 +38,13 @@ def parse_args():
     parser.add_argument("--output-dir", type=Path, default=Path("outputs") / "ef_mnist_experiment")
     parser.add_argument(
         "--feature-family",
-        choices=("gaussian", "binary-categorical", "poisson"),
+        choices=(
+            "gaussian",
+            "gaussian-unknown-variance",
+            "binary-categorical",
+            "poisson",
+            "multivariate-gaussian",
+        ),
         default="gaussian",
         help="Per-pixel exponential-family coordinate to use.",
     )
@@ -58,7 +70,7 @@ def parse_args():
 
 
 def prepare_features(x_train, x_lr_val, x_eval, args):
-    if args.feature_family == "gaussian":
+    if args.feature_family in ("gaussian", "gaussian-unknown-variance", "multivariate-gaussian"):
         x_train = x_train.astype(float) / 255.0
         x_lr_val = x_lr_val.astype(float) / 255.0
         x_eval = x_eval.astype(float) / 255.0
@@ -72,6 +84,9 @@ def prepare_features(x_train, x_lr_val, x_eval, args):
         x_eval = x_eval.astype(float)
     else:
         raise ValueError(f"unknown feature family {args.feature_family}")
+
+    if args.feature_family == "multivariate-gaussian" and args.max_features is None:
+        raise ValueError("multivariate-gaussian requires --max-features to keep covariance inversions practical")
 
     feature_indices = select_feature_indices(x_train, args.max_features)
     x_train = x_train[:, feature_indices]
@@ -96,10 +111,14 @@ def make_family_factories(args, feature_count):
             lambda variance=args.gaussian_variance: GaussianKnownVarianceCoordinate(variance)
             for _ in range(feature_count)
         )
+    if args.feature_family == "gaussian-unknown-variance":
+        return tuple(GaussianUnknownVarianceCoordinate for _ in range(feature_count))
     if args.feature_family == "binary-categorical":
         return tuple(lambda: CategoricalCoordinate(2) for _ in range(feature_count))
     if args.feature_family == "poisson":
         return tuple(PoissonCoordinate for _ in range(feature_count))
+    if args.feature_family == "multivariate-gaussian":
+        return (lambda count=feature_count: MultivariateGaussianCoordinate(count),)
     raise ValueError(f"unknown feature family {args.feature_family}")
 
 
