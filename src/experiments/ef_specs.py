@@ -4,11 +4,12 @@ from src.families import (
     CategoricalCoordinate,
     ExponentialMeanCoordinate,
     GaussianKnownVarianceCoordinate,
+    MultivariateGaussianCoordinate,
     PoissonCoordinate,
 )
 
 
-PURE_FAMILY_KEYS = ("categorical", "gaussian", "poisson", "exponential")
+PURE_FAMILY_KEYS = ("categorical", "gaussian", "poisson", "exponential", "multivariate_gaussian")
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,10 @@ def categorical(values):
 
 def gaussian(variance=1.0):
     return lambda: GaussianKnownVarianceCoordinate(variance=variance)
+
+
+def multivariate_gaussian(event_dim):
+    return lambda: MultivariateGaussianCoordinate(event_dim)
 
 
 def poisson():
@@ -54,6 +59,13 @@ def repeated_family_scenarios(factory):
 def categorical_scenarios():
     return tuple(
         (name, many_classes, tuple(categorical(value) for value in feature_values))
+        for name, many_classes, feature_values in paper_discrete_layouts()
+    )
+
+
+def multivariate_gaussian_scenarios():
+    return tuple(
+        (name, many_classes, (multivariate_gaussian(len(feature_values)),))
         for name, many_classes, feature_values in paper_discrete_layouts()
     )
 
@@ -142,6 +154,13 @@ FAMILY_EXPERIMENT_SPECS = {
         output_name="exponential_ef",
         default_output_dir="ef_exponential_experiment",
         complexity_scenarios=repeated_family_scenarios(exponential()),
+    ),
+    "multivariate_gaussian": EFExperimentSpec(
+        key="multivariate_gaussian",
+        title="Multivariate Gaussian EF",
+        output_name="multivariate_gaussian_ef",
+        default_output_dir="ef_multivariate_gaussian_experiment",
+        complexity_scenarios=multivariate_gaussian_scenarios(),
     ),
     "mixed_repeated": EFExperimentSpec(
         key="mixed_repeated",

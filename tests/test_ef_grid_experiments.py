@@ -19,11 +19,22 @@ from src.experiments.ef_specs import EFExperimentSpec, FAMILY_EXPERIMENT_SPECS, 
 
 class EFGridExperimentTests(unittest.TestCase):
     def test_pure_family_specs_have_three_complexity_levels(self):
+        self.assertIn("multivariate_gaussian", PURE_FAMILY_KEYS)
         for family_name in PURE_FAMILY_KEYS:
             with self.subTest(family=family_name):
                 spec = FAMILY_EXPERIMENT_SPECS[family_name]
                 self.assertEqual(len(spec.complexity_scenarios), 3)
                 self.assertEqual([scenario[0] for scenario in spec.complexity_scenarios], ["M1", "M2", "M3"])
+
+    def test_multivariate_gaussian_spec_uses_one_block_with_growing_event_dimension(self):
+        spec = FAMILY_EXPERIMENT_SPECS["multivariate_gaussian"]
+        event_dims = []
+
+        for _, _, family_factories in spec.complexity_scenarios:
+            self.assertEqual(len(family_factories), 1)
+            event_dims.append(family_factories[0]().event_dim)
+
+        self.assertEqual(event_dims, [2, 4, 6])
 
     def test_mixed_repeated_spec_repeats_all_family_types(self):
         spec = FAMILY_EXPERIMENT_SPECS["mixed_repeated"]
@@ -47,7 +58,7 @@ class EFGridExperimentTests(unittest.TestCase):
                 true_model = build_true_model(many_classes, family_factories, sigma=0.1, seed=3)
                 x, y = collect_sample(true_model, size=8, batch=4, seed=5)
 
-                self.assertEqual(x.shape, (8, len(model.families)))
+                self.assertEqual(x.shape, (8, model.observation_dim))
                 self.assertEqual(y.shape, (8,))
                 self.assertTrue(np.all((0 <= y) & (y < many_classes)))
                 self.assertTrue(np.isfinite(validation_nll(true_model, true_model.eta, x, y)))
