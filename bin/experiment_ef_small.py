@@ -11,7 +11,7 @@ from src.algorithms.adagrad_ef import AdaGrad_NaiveBayesEF
 from src.algorithms.dsngd_ef import DSNGD_NaiveBayesEF
 from src.algorithms.sgd_ef import SGD_NaiveBayesEF
 from src.data.ef_sample_creator import NaiveBayesEFSampleIterator
-from src.experiments.ef_grid import format_learning_rate, learning_rate_columns, samples_seen as experiment_samples_seen
+from src.experiments.ef_grid import format_learning_rate, learning_rate_columns
 from src.families import CategoricalCoordinate, GaussianKnownVarianceCoordinate
 from src.grapher import color, linestyles
 from src.model.naive_bayes_ef import NaiveBayesEF
@@ -111,15 +111,15 @@ def run_with_selected_lr(algorithm_class, selected_lr, true_model, train_size, b
 
 def save_curves(samples_seen, results, true_nll):
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    plot_x = samples_seen.copy()
-    plot_x[plot_x <= 0] = 1.0
+    plot_mask = samples_seen > 0
+    plot_x = samples_seen[plot_mask]
 
     plt.figure(figsize=(7, 4.2))
     for name, result in results.items():
         lr_text = format_learning_rate(result["lr"])
         plt.plot(
             plot_x,
-            result["curve"],
+            result["curve"][plot_mask],
             label=f"{name} {lr_text}",
             color=color[name],
             linestyle=linestyles[name],
@@ -141,7 +141,7 @@ def save_curves(samples_seen, results, true_nll):
         lr_text = format_learning_rate(result["lr"])
         plt.plot(
             plot_x,
-            excess,
+            excess[plot_mask],
             label=f"{name} {lr_text}",
             color=color[name],
             linestyle=linestyles[name],
@@ -182,7 +182,7 @@ def main():
     x_eval, y_eval = collect_sample(true_model, size=EVAL_VALIDATION_SIZE, batch=1000, seed=456)
     true_nll = validation_nll(true_model, true_model.eta, x_eval, y_eval)
     n_steps = len(NaiveBayesEFSampleIterator(true_model, epoch_length=train_size, epochs=1, batch=batch, random_seed=1))
-    samples_seen = experiment_samples_seen(train_size, batch, iter_keep=n_steps)
+    samples_seen = np.concatenate([np.arange(n_steps) * batch, np.array([train_size])])
 
     selected_lrs = {
         "SGD": choose_best_lr(SGD_NaiveBayesEF, true_model, lr_size, batch, train_seed, x_lr_val, y_lr_val),

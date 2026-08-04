@@ -3,38 +3,6 @@ import itertools as iter
 from tqdm import tqdm
 
 
-def log_spaced_checkpoint_iterations(sample_length, iter_keep):
-    """Return pre-update iteration indices whose positions are spaced on a log scale."""
-    sample_length = int(sample_length)
-    iter_keep = int(iter_keep)
-    if sample_length <= 0:
-        raise ValueError("sample_length must be positive")
-    if iter_keep <= 0:
-        raise ValueError("iter_keep must be positive")
-
-    keep = min(iter_keep, sample_length)
-    if keep == sample_length:
-        return np.arange(sample_length, dtype=int)
-    if keep == 1:
-        return np.array([0], dtype=int)
-
-    raw = np.geomspace(1.0, float(sample_length), num=keep) - 1.0
-    checkpoints = np.empty(keep, dtype=int)
-    previous = -1
-    for index, value in enumerate(raw):
-        remaining = keep - index - 1
-        lower = previous + 1
-        upper = sample_length - 1 - remaining
-        candidate = int(np.rint(value))
-        candidate = min(max(candidate, lower), upper)
-        checkpoints[index] = candidate
-        previous = candidate
-
-    checkpoints[0] = 0
-    checkpoints[-1] = sample_length - 1
-    return checkpoints
-
-
 class LineSearch:
     def __init__(self, director_process, name='LS'):
         self.director_process = director_process
@@ -47,9 +15,9 @@ class LineSearch:
     def run(self, sample, starting_point, lr, iter_keep, **kwargs):
         param = starting_point
         params = []
-        checkpoints = set(log_spaced_checkpoint_iterations(len(sample), iter_keep))
+        length = max(len(sample) // iter_keep, 1)
         for it, obs in enumerate(sample):
-            if it in checkpoints:
+            if it % length == 0:
                 params.append(param.copy())
             d = self.director_process(obs, param)
             r = self.lr_update(it, lr)

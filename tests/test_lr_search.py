@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 
-from src.algorithms import LineSearch, log_spaced_checkpoint_iterations
+from src.algorithms import LineSearch
 from src.algorithms.adagrad_ef import AdaGrad_NaiveBayesEF
 from src.algorithms.sgd_ef import SGD_NaiveBayesEF
 from src.data.ef_sample_creator import NaiveBayesEFSampleIterator
@@ -22,16 +22,6 @@ def validation_nll(model, eta, x, y):
 
 
 class LearningRateSearchTests(unittest.TestCase):
-    def test_checkpoint_iterations_are_log_spaced(self):
-        checkpoints = log_spaced_checkpoint_iterations(sample_length=10, iter_keep=4)
-
-        np.testing.assert_array_equal(checkpoints, np.array([0, 1, 4, 9]))
-
-    def test_checkpoint_iterations_keep_everything_when_requested(self):
-        checkpoints = log_spaced_checkpoint_iterations(sample_length=3, iter_keep=100)
-
-        np.testing.assert_array_equal(checkpoints, np.array([0, 1, 2]))
-
     def test_base_line_search_handles_large_iter_keep(self):
         optimizer = LineSearch(lambda _obs, param: np.zeros_like(param))
         sample = [0, 1, 2]

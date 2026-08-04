@@ -1,4 +1,3 @@
-from src.algorithms import log_spaced_checkpoint_iterations
 from src.algorithms.sgd import SGD_JointMLR
 from src.model.joint_mlr import JointMLR
 import numpy as np
@@ -22,11 +21,11 @@ class AdaGrad_JointMLR(SGD_JointMLR):
     def run(self, sample, starting_point, lr, verbose=False, iter_keep=100, **kwargs):
         alpha, beta = starting_point
         etas = []
-        checkpoints = set(log_spaced_checkpoint_iterations(len(sample), iter_keep))
+        length = max(len(sample) // iter_keep, 1)
         Gt = [0, 0]
         s = tqdm(enumerate(sample), total=len(sample)) if verbose else enumerate(sample)
         for it, obs in s:
-            if it in checkpoints:
+            if it % length == 0:
                 etas.append([alpha.copy(), beta.copy()])
             g_alpha, g_beta = self.director_process(obs, (alpha, beta))
             Gt[0] += g_alpha * g_alpha

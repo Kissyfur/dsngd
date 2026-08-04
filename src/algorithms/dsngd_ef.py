@@ -1,7 +1,7 @@
 import numpy as np
 from tqdm import tqdm
 
-from src.algorithms import LineSearch, log_spaced_checkpoint_iterations
+from src.algorithms import LineSearch
 from src.families import CategoricalCoordinate
 from src.model.naive_bayes_ef import NaiveBayesEF
 
@@ -148,12 +148,12 @@ class DSNGD_NaiveBayesEF(LineSearch):
         beta_blocks = [block.copy() for block in beta_blocks]
         dual_parameter = self.max_entropy_dual_parameter()
         etas = []
-        checkpoints = set(log_spaced_checkpoint_iterations(len(sample), iter_keep))
+        length = max(len(sample) // iter_keep, 1)
         desc = kwargs.get("desc", self.key)
         iterator = tqdm(enumerate(sample), total=len(sample), desc=desc) if verbose else enumerate(sample)
 
         for it, obs in iterator:
-            if it in checkpoints:
+            if it % length == 0:
                 etas.append([alpha.copy(), [block.copy() for block in beta_blocks]])
             ng_alpha, ng_beta_blocks = self.director_process(obs, (alpha, beta_blocks), dual_parameter)
             rate = self.lr_update(it, lr)

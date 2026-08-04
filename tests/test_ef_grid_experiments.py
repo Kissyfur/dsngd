@@ -9,7 +9,6 @@ from src.experiments.ef_grid import (
     ALGORITHMS,
     build_model,
     build_true_model,
-    checkpoint_samples_seen,
     collect_sample,
     learning_rate_columns,
     samples_seen,
@@ -56,12 +55,7 @@ class EFGridExperimentTests(unittest.TestCase):
     def test_samples_seen_matches_kept_optimizer_history(self):
         x_axis = samples_seen(train_size=1000, batch=100, iter_keep=4)
 
-        np.testing.assert_array_equal(x_axis, np.array([0, 100, 400, 900, 1000]))
-
-    def test_multi_epoch_samples_seen_uses_log_spaced_checkpoints(self):
-        x_axis = checkpoint_samples_seen(train_size=1000, batch=100, epochs=3, iter_keep=4)
-
-        np.testing.assert_array_equal(x_axis, np.array([0, 200, 900, 2900, 3000]))
+        np.testing.assert_array_equal(x_axis, np.array([0, 200, 400, 600, 800, 1000]))
 
     def test_grid_experiment_uses_independent_lr_and_evaluation_samples(self):
         captured = {}

@@ -10,7 +10,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.special import logsumexp
 
-from src.algorithms import log_spaced_checkpoint_iterations
 from src.algorithms.adagrad_ef import AdaGrad_NaiveBayesEF
 from src.algorithms.dsngd_ef import DSNGD_NaiveBayesEF
 from src.algorithms.sgd_ef import SGD_NaiveBayesEF
@@ -156,23 +155,13 @@ def format_learning_rate(lr):
 
 
 def samples_seen(train_size, batch, iter_keep=ITER_KEEP):
-    return checkpoint_samples_seen(train_size, batch, epochs=1, iter_keep=iter_keep)
-
-
-def checkpoint_samples_seen(train_size, batch, epochs=1, iter_keep=ITER_KEEP):
     if train_size <= 0 or batch <= 0:
         raise ValueError("train_size and batch must be positive")
-    if epochs <= 0:
-        raise ValueError("epochs must be positive")
     effective_batch = batch if batch < train_size else train_size
-    batches_per_epoch = math.ceil(train_size / effective_batch)
-    total_batches = epochs * batches_per_epoch
-    checkpoints = log_spaced_checkpoint_iterations(total_batches, iter_keep)
-    kept = []
-    for iteration in checkpoints:
-        full_epochs, batch_index = divmod(iteration, batches_per_epoch)
-        kept.append(full_epochs * train_size + min(batch_index * effective_batch, train_size))
-    return np.concatenate([np.array(kept, dtype=int), np.array([train_size * epochs])])
+    sample_length = math.ceil(train_size / effective_batch)
+    stride = max(sample_length // iter_keep, 1)
+    kept = np.arange(0, sample_length, stride) * effective_batch
+    return np.concatenate([kept, np.array([train_size])])
 
 
 def choose_best_lr(
@@ -232,8 +221,8 @@ def run_algorithm(
 
 def plot_grid(output_dir, output_name, x, median, lower, upper, complexity_labels, entropy_labels, algorithm_labels):
     output_dir.mkdir(parents=True, exist_ok=True)
-    plot_x = x.copy()
-    plot_x[plot_x <= 0] = 1.0
+    plot_mask = x > 0
+    plot_x = x[plot_mask]
     rows, columns = len(complexity_labels), len(entropy_labels)
     fig, axes = plt.subplots(rows, columns, figsize=(14, 9), sharex=True)
 
@@ -251,11 +240,11 @@ def plot_grid(output_dir, output_name, x, median, lower, upper, complexity_label
 
             for alg_index, name in enumerate(algorithm_labels):
                 line = median[row, col, alg_index]
-                ax.plot(plot_x, line, label=name, color=color[name], linestyle=linestyles[name])
+                ax.plot(plot_x, line[plot_mask], label=name, color=color[name], linestyle=linestyles[name])
                 ax.fill_between(
                     plot_x,
-                    lower[row, col, alg_index],
-                    upper[row, col, alg_index],
+                    lower[row, col, alg_index][plot_mask],
+                    upper[row, col, alg_index][plot_mask],
                     facecolor=color[name],
                     alpha=0.25,
                 )

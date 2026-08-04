@@ -1,4 +1,3 @@
-from src.algorithms import log_spaced_checkpoint_iterations
 from src.algorithms.dsngd import DSNGD_JointMLR
 from src.model.joint_mlr import JointMLR
 from tqdm import tqdm
@@ -14,10 +13,10 @@ class SNGD_JointMLR(DSNGD_JointMLR):
         alpha, beta = starting_point
         alpha_dual, beta_dual = self.model.to_dual([alpha, beta])
         etas = []
-        checkpoints = set(log_spaced_checkpoint_iterations(len(sample), iter_keep))
+        length = max(len(sample) // iter_keep, 1)
         s = tqdm(enumerate(sample), total=len(sample)) if verbose else enumerate(sample)
         for it, obs in s:
-            if it in checkpoints:
+            if it % length == 0:
                 etas.append([alpha.copy(), beta.copy()])
             ng_alpha, ng_beta = self.director_process(obs, (alpha, beta), (alpha_dual, beta_dual))
             r = self.lr_update(it, lr)
