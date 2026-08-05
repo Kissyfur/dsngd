@@ -10,7 +10,9 @@ from src.experiments.ef_grid import (
     build_model,
     build_true_model,
     collect_sample,
+    fold_to_natural_domain,
     learning_rate_columns,
+    random_natural_block,
     samples_seen,
     validation_nll,
 )
@@ -111,6 +113,27 @@ class EFGridExperimentTests(unittest.TestCase):
         self.assertTrue(np.all(true_model.beta_blocks[0] < 0.0))
         for block in true_model.beta_blocks:
             self.assertTrue(np.all(np.isfinite(block)))
+
+    def test_constrained_generation_folds_instead_of_clipping_to_boundary(self):
+        class FixedRng:
+            def normal(self, _mean, _sigma, size):
+                assert size == (3, 1)
+                return np.array([[2.0], [-0.5], [0.0]])
+
+        family = ExponentialMeanCoordinate(natural_margin=1e-6)
+        block = random_natural_block(family, many_classes=3, rng=FixedRng(), sigma=1.0)
+
+        np.testing.assert_allclose(block, np.array([[-1.0, -1.5, -1.0]]))
+
+    def test_multivariate_generation_folds_quadratic_eigenvalues(self):
+        family = MultivariateGaussianCoordinate(2)
+        raw = np.array([[0.0, 0.0, 1.0, 0.0, 0.0, 2.0]])
+
+        folded = fold_to_natural_domain(family, raw)
+        a = folded[0, family.event_dim :].reshape(family.event_dim, family.event_dim)
+
+        np.testing.assert_allclose(a, np.array([[-1.0, 0.0], [0.0, -2.0]]))
+        self.assertTrue(np.all(np.linalg.eigvalsh(a) < 0.0))
 
     def test_samples_seen_matches_kept_optimizer_history(self):
         x_axis = samples_seen(train_size=1000, batch=100, iter_keep=4)

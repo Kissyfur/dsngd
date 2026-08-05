@@ -13,6 +13,11 @@ from src.algorithms.adagrad_ef import AdaGrad_NaiveBayesEF
 from src.algorithms.dsngd_ef import DSNGD_NaiveBayesEF
 from src.algorithms.sgd_ef import SGD_NaiveBayesEF
 from src.data.ef_sample_creator import NaiveBayesEFSampleIterator
+from src.families import (
+    ExponentialMeanCoordinate,
+    GaussianUnknownVarianceCoordinate,
+    MultivariateGaussianCoordinate,
+)
 from src.grapher import color, linestyles
 from src.model.naive_bayes_ef import NaiveBayesEF
 
@@ -42,7 +47,26 @@ def build_model(many_classes, family_factories):
 def random_natural_block(family, many_classes, rng, sigma):
     neutral = family.natural_from_expectation(family.initial_expectation())
     natural_by_class = neutral + rng.normal(0.0, sigma, size=(many_classes, family.dim))
-    return family.project_natural(natural_by_class).T
+    return fold_to_natural_domain(family, natural_by_class).T
+
+
+def fold_to_natural_domain(family, natural_parameter):
+    theta = np.asarray(natural_parameter, dtype=float).copy()
+    if isinstance(family, ExponentialMeanCoordinate):
+        theta[..., 0] = -np.maximum(np.abs(theta[..., 0]), family.natural_margin)
+        return theta
+    if isinstance(family, GaussianUnknownVarianceCoordinate):
+        theta[..., 1] = -np.maximum(np.abs(theta[..., 1]), family.natural_margin)
+        return theta
+    if isinstance(family, MultivariateGaussianCoordinate):
+        h = theta[..., : family.event_dim]
+        a = theta[..., family.event_dim :].reshape(theta.shape[:-1] + (family.event_dim, family.event_dim))
+        a = 0.5 * (a + np.swapaxes(a, -1, -2))
+        eigenvalues, eigenvectors = np.linalg.eigh(a)
+        eigenvalues = -np.maximum(np.abs(eigenvalues), family.natural_margin)
+        a = np.matmul(eigenvectors * eigenvalues[..., None, :], np.swapaxes(eigenvectors, -1, -2))
+        return np.concatenate((h, a.reshape(theta.shape[:-1] + (family.event_dim * family.event_dim,))), axis=-1)
+    return theta
 
 
 def build_true_model(many_classes, family_factories, sigma, seed):
