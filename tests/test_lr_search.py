@@ -8,17 +8,13 @@ from src.algorithms import LineSearch
 from src.algorithms.adagrad_ef import AdaGrad_NaiveBayesEF
 from src.algorithms.sgd_ef import SGD_NaiveBayesEF
 from src.data.ef_sample_creator import NaiveBayesEFSampleIterator
+from src.experiments.ef_grid import validation_nll
 from src.families import CategoricalCoordinate, GaussianKnownVarianceCoordinate
 from src.model.naive_bayes_ef import NaiveBayesEF
 
 
 def build_model():
     return NaiveBayesEF(2, [CategoricalCoordinate(2), GaussianKnownVarianceCoordinate(variance=1.0)])
-
-
-def validation_nll(model, eta, x, y):
-    log_probabilities = model.log_conditional_probabilities(x, eta)
-    return -float(np.mean(log_probabilities[np.arange(len(y)), y]))
 
 
 class LearningRateSearchTests(unittest.TestCase):
