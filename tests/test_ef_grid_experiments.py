@@ -7,6 +7,8 @@ import numpy as np
 import src.experiments.ef_grid as ef_grid
 from src.experiments.ef_grid import (
     ALGORITHMS,
+    DEFAULT_EVAL_VALIDATION_SIZE,
+    DEFAULT_LR_VALIDATION_SIZE,
     build_model,
     build_true_model,
     collect_sample,
@@ -67,6 +69,9 @@ class EFGridExperimentTests(unittest.TestCase):
 
     def test_grid_algorithms_include_adagrad(self):
         self.assertEqual([name for name, _ in ALGORITHMS], ["SGD", "AdaGrad", "DSNGD"])
+
+    def test_lr_and_evaluation_monte_carlo_defaults_match(self):
+        self.assertEqual(DEFAULT_LR_VALIDATION_SIZE, DEFAULT_EVAL_VALIDATION_SIZE)
 
     def test_learning_rate_columns_supports_single_parameter_schedules(self):
         self.assertEqual(learning_rate_columns(np.array([0.1])), (0.1, ""))
