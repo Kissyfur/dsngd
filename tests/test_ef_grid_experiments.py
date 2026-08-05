@@ -15,6 +15,7 @@ from src.experiments.ef_grid import (
     validation_nll,
 )
 from src.experiments.ef_specs import EFExperimentSpec, FAMILY_EXPERIMENT_SPECS, PURE_FAMILY_KEYS, gaussian
+from src.families import ExponentialMeanCoordinate, GaussianKnownVarianceCoordinate, MultivariateGaussianCoordinate
 
 
 class EFGridExperimentTests(unittest.TestCase):
@@ -81,6 +82,35 @@ class EFGridExperimentTests(unittest.TestCase):
                 self.assertEqual(y.shape, (8,))
                 self.assertTrue(np.all((0 <= y) & (y < many_classes)))
                 self.assertTrue(np.isfinite(validation_nll(true_model, true_model.eta, x, y)))
+
+    def test_true_model_draws_unconstrained_parameters_in_natural_coordinates(self):
+        sigma = 0.7
+        seed = 13
+        rng = np.random.default_rng(seed)
+        expected_alpha = rng.normal(0.0, sigma, size=2)
+        expected_beta = rng.normal(0.0, sigma, size=(3, 1))
+
+        true_model = build_true_model(
+            many_classes=3,
+            family_factories=tuple(GaussianKnownVarianceCoordinate for _ in range(1)),
+            sigma=sigma,
+            seed=seed,
+        )
+
+        np.testing.assert_allclose(true_model.alpha, expected_alpha)
+        np.testing.assert_allclose(true_model.beta_blocks[0].T, expected_beta)
+
+    def test_true_model_projects_constrained_natural_parameters(self):
+        true_model = build_true_model(
+            many_classes=3,
+            family_factories=(ExponentialMeanCoordinate, lambda: MultivariateGaussianCoordinate(2)),
+            sigma=1.0,
+            seed=19,
+        )
+
+        self.assertTrue(np.all(true_model.beta_blocks[0] < 0.0))
+        for block in true_model.beta_blocks:
+            self.assertTrue(np.all(np.isfinite(block)))
 
     def test_samples_seen_matches_kept_optimizer_history(self):
         x_axis = samples_seen(train_size=1000, batch=100, iter_keep=4)

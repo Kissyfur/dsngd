@@ -8,20 +8,11 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.special import logsumexp
 
 from src.algorithms.adagrad_ef import AdaGrad_NaiveBayesEF
 from src.algorithms.dsngd_ef import DSNGD_NaiveBayesEF
 from src.algorithms.sgd_ef import SGD_NaiveBayesEF
 from src.data.ef_sample_creator import NaiveBayesEFSampleIterator
-from src.families import (
-    CategoricalCoordinate,
-    ExponentialMeanCoordinate,
-    GaussianKnownVarianceCoordinate,
-    GaussianUnknownVarianceCoordinate,
-    MultivariateGaussianCoordinate,
-    PoissonCoordinate,
-)
 from src.grapher import color, linestyles
 from src.model.naive_bayes_ef import NaiveBayesEF
 
@@ -48,60 +39,20 @@ def build_model(many_classes, family_factories):
     return NaiveBayesEF(many_classes, [factory() for factory in family_factories])
 
 
-def alpha_for_priors(model, priors, beta_blocks):
-    priors = np.asarray(priors, dtype=float)
-    log_weights = np.log(priors)
-    for class_index in range(model.many_classes):
-        for family, block in zip(model.families, beta_blocks):
-            log_weights[class_index] -= family.log_partition(block[:, class_index])
-    return log_weights[:-1] - log_weights[-1]
-
-
-def random_categorical_expectation(family, rng, sigma):
-    logits = rng.normal(0.0, sigma, size=family.many_values)
-    probabilities = np.exp(logits - logsumexp(logits))
-    return probabilities[:-1]
-
-
-def random_expectation(family, rng, sigma):
-    if isinstance(family, CategoricalCoordinate):
-        return random_categorical_expectation(family, rng, sigma)
-    if isinstance(family, GaussianKnownVarianceCoordinate):
-        return rng.normal(0.0, sigma, size=family.dim)
-    if isinstance(family, GaussianUnknownVarianceCoordinate):
-        mean = rng.normal(0.0, sigma)
-        variance = np.exp(rng.normal(0.0, sigma))
-        return np.array([mean, mean * mean + variance], dtype=float)
-    if isinstance(family, MultivariateGaussianCoordinate):
-        mean = rng.normal(0.0, sigma, size=family.event_dim)
-        diagonal = np.diag(np.exp(rng.normal(0.0, sigma, size=family.event_dim)))
-        factors = rng.normal(0.0, sigma / np.sqrt(family.event_dim), size=(family.event_dim, family.event_dim))
-        covariance = diagonal + factors @ factors.T
-        second = covariance + mean[:, None] * mean[None, :]
-        return np.concatenate((mean, second.reshape(-1)))
-    if isinstance(family, PoissonCoordinate):
-        return np.exp(rng.normal(0.0, sigma, size=family.dim))
-    if isinstance(family, ExponentialMeanCoordinate):
-        return np.exp(rng.normal(0.0, sigma, size=family.dim))
-    raise TypeError(f"unsupported family {type(family).__name__}")
+def random_natural_block(family, many_classes, rng, sigma):
+    neutral = family.natural_from_expectation(family.initial_expectation())
+    natural_by_class = neutral + rng.normal(0.0, sigma, size=(many_classes, family.dim))
+    return family.project_natural(natural_by_class).T
 
 
 def build_true_model(many_classes, family_factories, sigma, seed):
     rng = np.random.default_rng(seed)
     model = build_model(many_classes, family_factories)
-    beta_blocks = []
-    for family in model.families:
-        block = np.column_stack(
-            [
-                family.natural_from_expectation(random_expectation(family, rng, sigma))
-                for _ in range(many_classes)
-            ]
-        )
-        beta_blocks.append(block)
-
-    prior_logits = rng.normal(0.0, sigma, size=many_classes)
-    priors = np.exp(prior_logits - logsumexp(prior_logits))
-    alpha = alpha_for_priors(model, priors, beta_blocks)
+    alpha = rng.normal(0.0, sigma, size=many_classes - 1)
+    beta_blocks = [
+        random_natural_block(family, many_classes, rng, sigma)
+        for family in model.families
+    ]
     model.set_eta((alpha, beta_blocks))
     return model
 
