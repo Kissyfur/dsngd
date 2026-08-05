@@ -69,8 +69,7 @@ Run the smoke tests with:
 python -m unittest discover -s tests
 ```
 
-Run a small mixed categorical/Gaussian comparison between generic SGD and DSNGD
-with:
+Run a small mixed categorical/Gaussian comparison between the EF optimizers with:
 
 ```bash
 python bin/experiment_ef_small.py
@@ -99,10 +98,9 @@ python bin/experiment_ef_mnist.py --feature-family gaussian
 ```
 
 The script downloads MNIST into `saved_data/mnist/` when needed. Current
-per-pixel feature-family choices are `gaussian`, `binary-categorical`, and
-`poisson`; this keeps the real-data experiment ready for richer families such as
-a multivariate Gaussian later. MNIST training runs for 10 epochs by default; use
-`--epochs 100` for a longer run.
+per-pixel feature-family choices are `gaussian`, `gaussian-unknown-variance`,
+`binary-categorical`, `poisson`, and `multivariate-gaussian`. MNIST training
+runs for 10 epochs by default; use `--epochs 100` for a longer run.
 
 Experiment definitions live in `src/experiments/ef_specs.py`; the shared runner,
 learning-rate search, independent evaluation split, CSV output, and plotting live

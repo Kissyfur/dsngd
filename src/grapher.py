@@ -10,13 +10,9 @@ def plot_lines(x, graphs, labels, x_labels=False, y_labels=False, low_lines=None
     rows = len(graphs)
     columns = len(graphs[0])
     grid_num = rows*100 + columns*10 + 1
-    # plt.figure(figsize=(14, 3.9))
     for row in range(rows):
         for col in range(columns):
             ax = plt.subplot(grid_num + columns * row + col)
-            # if col != 0:
-            #     ax.get_yaxis().set_visible(False)
-            # elif y_labels:
             if col == 0:
                 plt.ylabel(y_labels[row], rotation=1)
             if row != rows-1:
@@ -25,11 +21,7 @@ def plot_lines(x, graphs, labels, x_labels=False, y_labels=False, low_lines=None
                 plt.xlabel(x_labels[col])
 
             lines = graphs[row][col]
-            # convert y-axis to Logarithmic scale
-            # plt.yscale("log")
-            # convert y-axis to Logarithmic scale
             plt.xscale("log")
-            # plt.xlim(10e3, 10e6)
             for l in range(len(lines)):
                 line = lines[l]
                 l_line = low_lines[row][col][l]
@@ -39,7 +31,6 @@ def plot_lines(x, graphs, labels, x_labels=False, y_labels=False, low_lines=None
                     plt.semilogy()
                     plt.plot(x, line, label=name if col + row == 0 else "", color=color[name],
                              linestyle=linestyles[name])
-                    # uncomment below line to fill quartiles
                     plt.fill_between(x, l_line, h_line, facecolor=color[name], alpha=0.35)
             plt.figlegend(loc=8, ncol=len(labels))
     if file_name:

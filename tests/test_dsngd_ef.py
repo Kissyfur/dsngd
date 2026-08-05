@@ -4,7 +4,12 @@ import numpy as np
 
 from src.algorithms.dsngd import DSNGD_JointMLR
 from src.algorithms.dsngd_ef import DSNGD_NaiveBayesEF, EmpiricalSufficientStatisticDual
-from src.families import CategoricalCoordinate
+from src.families import (
+    CategoricalCoordinate,
+    ExponentialMeanCoordinate,
+    GaussianKnownVarianceCoordinate,
+    MultivariateGaussianCoordinate,
+)
 from src.model.joint_mlr import JointMLR
 from src.model.naive_bayes_ef import NaiveBayesEF
 
@@ -119,6 +124,43 @@ class DSNGDEFTests(unittest.TestCase):
         etas = optimizer.run(sample, model.eta, lr=[0.01, 0.0], iter_keep=2)
 
         self.assertGreaterEqual(len(etas), 2)
+        final_alpha, final_beta_blocks = etas[-1]
+        self.assertTrue(np.all(np.isfinite(final_alpha)))
+        for block in final_beta_blocks:
+            self.assertTrue(np.all(np.isfinite(block)))
+        self.assertGreater(
+            np.linalg.norm(final_alpha) + sum(np.linalg.norm(block) for block in final_beta_blocks),
+            0.0,
+        )
+
+    def test_generic_branch_runs_on_mixed_continuous_blocks(self):
+        model = NaiveBayesEF(
+            2,
+            [
+                CategoricalCoordinate(2),
+                GaussianKnownVarianceCoordinate(variance=1.0),
+                ExponentialMeanCoordinate(),
+                MultivariateGaussianCoordinate(2),
+            ],
+        )
+        optimizer = DSNGD_NaiveBayesEF(model)
+        sample = [
+            (
+                np.array(
+                    [
+                        [0, -0.5, 1.0, 0.0, 0.0],
+                        [1, 0.5, 2.0, 1.0, -1.0],
+                        [0, 0.2, 0.75, 0.5, 0.25],
+                        [1, -1.0, 1.5, -0.5, 0.5],
+                    ],
+                    dtype=float,
+                ),
+                np.array([0, 1, 0, 1]),
+            )
+        ]
+
+        etas = optimizer.run(sample, model.eta, lr=[0.001, 0.0], iter_keep=1)
+
         final_alpha, final_beta_blocks = etas[-1]
         self.assertTrue(np.all(np.isfinite(final_alpha)))
         for block in final_beta_blocks:

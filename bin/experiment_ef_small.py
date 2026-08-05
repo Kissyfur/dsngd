@@ -7,11 +7,17 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from src.algorithms.adagrad_ef import AdaGrad_NaiveBayesEF
-from src.algorithms.dsngd_ef import DSNGD_NaiveBayesEF
-from src.algorithms.sgd_ef import SGD_NaiveBayesEF
 from src.data.ef_sample_creator import NaiveBayesEFSampleIterator
-from src.experiments.ef_grid import format_learning_rate, learning_rate_columns
+from src.experiments.ef_grid import (
+    ALGORITHMS,
+    choose_best_lr,
+    collect_sample,
+    format_learning_rate,
+    learning_rate_columns,
+    samples_seen,
+    validation_curve,
+    validation_nll,
+)
 from src.families import CategoricalCoordinate, GaussianKnownVarianceCoordinate
 from src.grapher import color, linestyles
 from src.model.naive_bayes_ef import NaiveBayesEF
@@ -61,47 +67,12 @@ def build_true_model():
     return model
 
 
-def collect_sample(model, size, batch, seed):
-    iterator = NaiveBayesEFSampleIterator(model, epoch_length=size, epochs=1, batch=batch, random_seed=seed)
-    batches = list(iterator)
-    x = np.vstack([batch_x for batch_x, _ in batches])
-    y = np.concatenate([batch_y for _, batch_y in batches])
-    return x, y
-
-
-def validation_nll(model, eta, x, y):
-    log_probabilities = model.log_conditional_probabilities(x, eta)
-    return -float(np.mean(log_probabilities[np.arange(len(y)), y]))
-
-
-def validation_curve(model, etas, x, y):
-    return np.array([validation_nll(model, eta, x, y) for eta in etas])
-
-
 def run_candidate(algorithm_class, true_model, lr, train_size, batch, train_seed, x_val, y_val):
     model = build_model()
     optimizer = algorithm_class(model)
     train = NaiveBayesEFSampleIterator(true_model, epoch_length=train_size, epochs=1, batch=batch, random_seed=train_seed)
     etas = optimizer.run(train, model.eta, lr=lr, iter_keep=len(train))
     return validation_curve(model, etas, x_val, y_val)
-
-
-def choose_best_lr(algorithm_class, true_model, lr_size, batch, train_seed, x_val, y_val):
-    model = build_model()
-    optimizer = algorithm_class(model)
-    data = {
-        "model_factory": build_model,
-        "sample_factory": lambda: NaiveBayesEFSampleIterator(
-            true_model,
-            epoch_length=lr_size,
-            epochs=1,
-            batch=batch,
-            random_seed=train_seed,
-        ),
-        "validation_curve": lambda fit_model, etas: validation_curve(fit_model, etas, x_val, y_val),
-        "score_tail": 5,
-    }
-    return optimizer.adjust_lr_with_data(data, progress_bar=False)
 
 
 def run_with_selected_lr(algorithm_class, selected_lr, true_model, train_size, batch, train_seed, x_val, y_val):
@@ -179,51 +150,37 @@ def main():
         raise ValueError("lr_size must be no larger than train_size because LR search uses the training prefix")
     train_seed = 7
     x_lr_val, y_lr_val = collect_sample(true_model, size=LR_VALIDATION_SIZE, batch=500, seed=123)
+    x_lr_train, y_lr_train = collect_sample(true_model, size=lr_size, batch=batch, seed=train_seed)
     x_eval, y_eval = collect_sample(true_model, size=EVAL_VALIDATION_SIZE, batch=1000, seed=456)
     true_nll = validation_nll(true_model, true_model.eta, x_eval, y_eval)
-    n_steps = len(NaiveBayesEFSampleIterator(true_model, epoch_length=train_size, epochs=1, batch=batch, random_seed=1))
-    samples_seen = np.concatenate([np.arange(n_steps) * batch, np.array([train_size])])
+    x_axis = samples_seen(train_size, batch)
 
-    selected_lrs = {
-        "SGD": choose_best_lr(SGD_NaiveBayesEF, true_model, lr_size, batch, train_seed, x_lr_val, y_lr_val),
-        "AdaGrad": choose_best_lr(AdaGrad_NaiveBayesEF, true_model, lr_size, batch, train_seed, x_lr_val, y_lr_val),
-        "DSNGD": choose_best_lr(DSNGD_NaiveBayesEF, true_model, lr_size, batch, train_seed, x_lr_val, y_lr_val),
-    }
-    results = {
-        "SGD": run_with_selected_lr(
-            SGD_NaiveBayesEF,
-            selected_lrs["SGD"],
+    results = {}
+    for algorithm_name, algorithm_class in ALGORITHMS:
+        selected_lr = choose_best_lr(
+            algorithm_class,
+            build_model,
+            x_lr_train,
+            y_lr_train,
+            batch,
+            train_seed,
+            x_lr_val,
+            y_lr_val,
+            progress_bar=False,
+        )
+        results[algorithm_name] = run_with_selected_lr(
+            algorithm_class,
+            selected_lr,
             true_model,
             train_size,
             batch,
             train_seed,
             x_eval,
             y_eval,
-        ),
-        "AdaGrad": run_with_selected_lr(
-            AdaGrad_NaiveBayesEF,
-            selected_lrs["AdaGrad"],
-            true_model,
-            train_size,
-            batch,
-            train_seed,
-            x_eval,
-            y_eval,
-        ),
-        "DSNGD": run_with_selected_lr(
-            DSNGD_NaiveBayesEF,
-            selected_lrs["DSNGD"],
-            true_model,
-            train_size,
-            batch,
-            train_seed,
-            x_eval,
-            y_eval,
-        ),
-    }
+        )
 
-    save_curves(samples_seen, results, true_nll)
-    save_summary(samples_seen, results, true_nll)
+    save_curves(x_axis, results, true_nll)
+    save_summary(x_axis, results, true_nll)
 
     print(f"Saved results to {OUTPUT_DIR}")
     print(f"True model evaluation NLL: {true_nll:.6f}")

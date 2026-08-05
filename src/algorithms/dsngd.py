@@ -5,11 +5,6 @@ from src.algorithms import LineSearch
 from src.model.joint_mlr import JointMLR
 from tqdm import tqdm
 
-def unison_shuffled_copies(a, b):
-    assert len(a) == len(b)
-    p = np.random.permutation(len(a))
-    return a[p], b[p]
-
 
 class DSNGD_JointMLR(LineSearch):
     CLASS_NAME = "DSNGD"
@@ -17,13 +12,12 @@ class DSNGD_JointMLR(LineSearch):
     def __init__(self, model: JointMLR, name=CLASS_NAME):
         super(DSNGD_JointMLR, self).__init__(self.aprox_natural_gradient_log_conditional_probability, name)
         self.model = model
-        # self.lr_training_function = self.lr_cost_function
 
     def aprox_natural_gradient_log_conditional_probability(self, sample, eta, dual_parameter):
         x, y = sample
         alpha_dual, beta_dual = dual_parameter
         py_inv = np.sum(alpha_dual) / alpha_dual
-        D = (np.sum(alpha_dual) / beta_dual) #* py_inv
+        D = np.sum(alpha_dual) / beta_dual
         Di = []
         start = 0
         for mi in self.model.T.m:
@@ -50,8 +44,6 @@ class DSNGD_JointMLR(LineSearch):
 
     def run(self, sample, starting_point, lr, iter_keep=100, verbose=False, **kwargs):
         alpha, beta = starting_point
-        # alpha_dual = np.zeros(self.model.S.many_values) + 0.1
-        # beta_dual = np.zeros((np.sum(self.model.T.m), self.model.S.many_values)) + 0.1
         alpha_dual, beta_dual = self.max_entropy_dual_parameter()
         etas = []
         length = max(len(sample) // iter_keep, 1)
@@ -82,5 +74,4 @@ class DSNGD_JointMLR(LineSearch):
             end = start + (self.model.T.m[i])
             beta_dual[start:end, :] = psi / (self.model.T.m[i] * self.model.S.many_values)
             start = end
-        # dual_p = np.random.random((self.cp.y_dimension,self.dp.x_dimension))
         return alpha_dual, beta_dual

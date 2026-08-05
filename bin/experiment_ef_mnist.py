@@ -14,6 +14,7 @@ from src.data.mnist import load_mnist
 from src.experiments.ef_grid import (
     ALGORITHMS,
     ITER_KEEP,
+    build_model,
     format_learning_rate,
     learning_rate_columns,
     validation_curve,
@@ -26,7 +27,6 @@ from src.families import (
     PoissonCoordinate,
 )
 from src.grapher import color, linestyles
-from src.model.naive_bayes_ef import NaiveBayesEF
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -130,10 +130,6 @@ def split_train_and_lr_validation(x, y, lr_validation_size, seed):
     lr_indices = order[:lr_validation_size]
     train_indices = order[lr_validation_size:]
     return x[train_indices], y[train_indices], x[lr_indices], y[lr_indices]
-
-
-def build_model(many_classes, family_factories):
-    return NaiveBayesEF(many_classes, [factory() for factory in family_factories])
 
 
 def choose_best_lr_real(

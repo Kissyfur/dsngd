@@ -1,6 +1,5 @@
 import numpy as np
 
-from tqdm import tqdm
 from src.data.batch_iterator import BatchedIterator
 from src.model.joint_mlr import JointMLR
 
@@ -31,15 +30,3 @@ class JointMLRSampleIterator(BatchedIterator):
         x = self.x[x_indices]
         y = batch_indices % self.model.S.many_values
         return x, y
-
-
-if __name__ == "__main__":
-    j_mlr = JointMLR(3, [4, 3, 2])
-    j_mlr_sampler = JointMLRSampleIterator(j_mlr, 10000000, 2, 500)
-    x = 0
-    for obs in tqdm(j_mlr_sampler):
-        x += 1
-
-    for obs in tqdm(j_mlr_sampler):
-        x += 1
-    print("finished")

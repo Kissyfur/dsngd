@@ -47,27 +47,13 @@ class LineSearch:
             learning_rates = self.tqdm(learning_rates, desc=f"{self.key} learning-rate search")
         for lr in learning_rates:
             try:
-                # print("lr: ", lr)
                 err = run_algorithm_and_evaluate_in_f(lr)
-                # print("error: ", err)
                 if not np.isfinite(best_err) or err < best_err:
                     best_lr = lr
                     best_err = err
             except (OverflowError, np.linalg.LinAlgError, FloatingPointError):
                 pass
         print("Best lr for", self.key, "is ", best_lr, "with error: ", best_err, flush=True)
-        # if best_lr[0] == 10. ** a_exps[0]:
-        #     print("Decrease min a range")
-        #     exit()
-        # if (best_lr[0] == 10. ** a_exps[-1]):
-        #     print("Increase max a range")
-        #     exit()
-        # if (best_lr[1] == 10. ** b_exps[0]):
-        #     print("Decrease min b range")
-        #     exit()
-        # if (best_lr[1] == 10. ** b_exps[-1]):
-        #     print("Increase max max  b range")
-        #     exit()
         return best_lr
 
     def lr_training_function(self, data):

@@ -88,7 +88,7 @@ class EFGridExperimentTests(unittest.TestCase):
         self.assertEqual(learning_rate_columns(np.array([0.1])), (0.1, ""))
 
     def test_family_specs_build_valid_true_models_and_samples(self):
-        for family_name in PURE_FAMILY_KEYS + ("mixed_repeated",):
+        for family_name in PURE_FAMILY_KEYS + ("mixed", "mixed_repeated"):
             with self.subTest(family=family_name):
                 spec = FAMILY_EXPERIMENT_SPECS[family_name]
                 _, many_classes, family_factories = spec.complexity_scenarios[0]
@@ -240,7 +240,7 @@ class EFGridExperimentTests(unittest.TestCase):
 
         self.assertEqual(captured["sampler"], MATCHED_SAMPLER)
         self.assertEqual(captured["lr_validation_size_marker"], 1030)
-        self.assertEqual(captured["lr_train_size_marker"], 1020)
+        self.assertEqual(captured["lr_train_size_marker"], 30)
         self.assertEqual(captured["evaluation_size_marker"], 101000)
         self.assertEqual(captured["lr_train_seed"], captured["final_train_seed"])
         self.assertEqual(captured["lr_train_sample_seed"], captured["final_train_seed"])

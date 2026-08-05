@@ -20,7 +20,6 @@ class JointMLR:
         self.beta = np.zeros((self.T.dim, self.S.dim + 1))
         self.eta = (self.alpha, self.beta)
         self.history = {}
-        # self.trainer = Trainer()
         self.pyx = None
 
     def set_random_eta(self, sigma):
@@ -60,13 +59,6 @@ class JointMLR:
         lcp = self.log_conditional_probabilities(x, etas)
         return np.exp(lcp)
 
-    # def log_p(self, x, y):
-    #     all_log_p = self.predict(x)
-    #     n = len(y)
-    #     y = y.copy().astype(int)
-    #     log_p = all_log_p[:, y, range(n)]
-    #     return log_p
-
     def compute_all_x(self):
         ranged_xd_values = [range(i) for i in self.T.m]
         return itertools.product(*ranged_xd_values)
@@ -88,7 +80,6 @@ class JointMLR:
         alpha, beta = eta
         alpha_dual, beta_dual = np.zeros(self.S.many_values), np.zeros((np.sum(self.T.m), self.S.many_values))
 
-        # pyx = self.compute_all_pyx(eta)
         x = np.array(list(self.compute_all_x()))
         log_numerators = self.log_measures(x, [eta])[0]
         log_denominator = logsumexp(log_numerators)
@@ -117,7 +108,6 @@ class JointMLR:
             try:
                 etas = optimizer.run(sample, starting_point=(self.alpha.copy(), self.beta.copy()), lr=lr, iter_keep=100)
                 err = np.sum(self.compute_metrics(true_model, etas[-5:]))
-                # logging.info(f"Learning rate: {lr} with error: {err} ")
 
                 if err < best_err:
                     best_lr = lr
@@ -145,7 +135,6 @@ class JointMLR:
         log_pred = self.log_conditional_probabilities(all_x, estimations)
         log_true_model = self.log_conditional_probabilities(all_x, [true_model.eta])
         kl = self.relative_entropy(true_pyx, log_pred) - self.relative_entropy(true_pyx, log_true_model)
-        # kl = self.relative_entropy(true_pyx, log_pred)
         return kl
 
     def compute_history_metrics(self, true_model):
@@ -153,6 +142,6 @@ class JointMLR:
         self.history['error'] = self.compute_metrics(true_model, etas)
 
     def relative_entropy(self, p, log_qs):
-        kl = -p * log_qs  # + p * np.log(p)# + p[non_zeros] * np.log(p)[non_zeros]
+        kl = -p * log_qs
         kl = np.sum(kl, axis=(1, 2))
         return kl

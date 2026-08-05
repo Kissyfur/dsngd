@@ -53,10 +53,3 @@ class CanonicalFeatureStatistic(Statistic):
 
     def identity(self, rvs):
         return np.hstack([cs.identity(rv) for cs, rv in zip(self.canonical_statistics, rvs.T)])
-
-
-
-if __name__ == "__main__":
-    T = CanonicalStatistic(3)
-    x = np.array([0])
-    print(T.tau(x).T)

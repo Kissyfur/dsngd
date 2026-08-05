@@ -3,11 +3,9 @@ import numpy as np
 
 from src.model.joint_mlr import JointMLR
 from src.data.sample_creator import JointMLRSampleIterator
-from tqdm import tqdm
 from src.algorithms.sgd import SGD_JointMLR
 from src.algorithms.dsngd import DSNGD_JointMLR
 from src.grapher import plot_lines
-from src.algorithms.sngd import SNGD_JointMLR
 from src.algorithms.adaGrad import AdaGrad_JointMLR
 
 
@@ -21,14 +19,11 @@ if __name__ == "__main__":
     n_lr = 500 * batch
     many_experiments = 1
     entropies = [0.1, 0.7, 1]
-    # entropies = [1]
     M_1 = (10, [10, 5])
     M_2 = (20, [10, 5, 10, 5])
     M_3 = (30, [10, 5, 10, 5, 10, 5])
     manifolds = [M_1, M_2, M_3]
-    algorithm_classes = [SGD_JointMLR, AdaGrad_JointMLR, DSNGD_JointMLR, SNGD_JointMLR]
     algorithm_classes = [SGD_JointMLR, AdaGrad_JointMLR, DSNGD_JointMLR]
-    # algorithm_classes = [DSNGD_JointMLR]
     many_algs = len(algorithm_classes)
     d = {}
     gr = np.zeros((3, 3, many_algs, 101))
@@ -52,7 +47,6 @@ if __name__ == "__main__":
                     logging.info(f"Algorithm: {algo_class.CLASS_NAME}")
                     model = JointMLR(s, m)
                     algo = algo_class(model)
-                    # lr = model.find_best_lr(problem, sample_lr, algo) if algo.CLASS_NAME != 'DSNGD' else  np.array([0.0001, 0.01])
                     lr = model.find_best_lr(problem, sample_lr, algo)
                     model.fit(sample, algo, verbose=True, lr=lr)
                     model.compute_history_metrics(problem)
