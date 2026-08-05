@@ -10,6 +10,8 @@ from src.families import (
 
 
 PURE_FAMILY_KEYS = ("categorical", "gaussian", "poisson", "exponential", "multivariate_gaussian")
+MATCHED_SAMPLER = "matched"
+SUPPORTED_SYNTHETIC_SAMPLERS = (MATCHED_SAMPLER,)
 
 
 @dataclass(frozen=True)
@@ -19,6 +21,7 @@ class EFExperimentSpec:
     output_name: str
     default_output_dir: str
     complexity_scenarios: tuple
+    sampler: str = MATCHED_SAMPLER
 
 
 def categorical(values):

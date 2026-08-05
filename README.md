@@ -44,6 +44,8 @@ around one abstraction per feature coordinate:
 
 - `src.families.CategoricalCoordinate`
 - `src.families.GaussianKnownVarianceCoordinate`
+- `src.families.GaussianUnknownVarianceCoordinate`
+- `src.families.MultivariateGaussianCoordinate`
 - `src.families.PoissonCoordinate`
 - `src.families.ExponentialMeanCoordinate`
 
@@ -84,6 +86,11 @@ python bin/experiment_ef_family.py gaussian
 python bin/experiment_ef_mixed.py
 python bin/experiment_ef_mixed_repeated.py
 ```
+
+Synthetic grid experiments use a matched sampler by default: the true
+data-generating model is drawn in the same exponential-family product manifold
+as the model being fitted. The CSV outputs include the sampler regime so future
+misspecified experiments can be compared explicitly.
 
 Prepare and run a first real-data MNIST experiment with:
 

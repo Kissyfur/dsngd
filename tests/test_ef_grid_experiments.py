@@ -18,7 +18,13 @@ from src.experiments.ef_grid import (
     samples_seen,
     validation_nll,
 )
-from src.experiments.ef_specs import EFExperimentSpec, FAMILY_EXPERIMENT_SPECS, PURE_FAMILY_KEYS, gaussian
+from src.experiments.ef_specs import (
+    EFExperimentSpec,
+    FAMILY_EXPERIMENT_SPECS,
+    MATCHED_SAMPLER,
+    PURE_FAMILY_KEYS,
+    gaussian,
+)
 from src.families import ExponentialMeanCoordinate, GaussianKnownVarianceCoordinate, MultivariateGaussianCoordinate
 
 
@@ -73,6 +79,11 @@ class EFGridExperimentTests(unittest.TestCase):
     def test_lr_and_evaluation_monte_carlo_defaults_match(self):
         self.assertEqual(DEFAULT_LR_VALIDATION_SIZE, DEFAULT_EVAL_VALIDATION_SIZE)
 
+    def test_synthetic_experiment_specs_use_matched_sampler(self):
+        for spec in FAMILY_EXPERIMENT_SPECS.values():
+            with self.subTest(family=spec.key):
+                self.assertEqual(spec.sampler, MATCHED_SAMPLER)
+
     def test_learning_rate_columns_supports_single_parameter_schedules(self):
         self.assertEqual(learning_rate_columns(np.array([0.1])), (0.1, ""))
 
@@ -82,7 +93,7 @@ class EFGridExperimentTests(unittest.TestCase):
                 spec = FAMILY_EXPERIMENT_SPECS[family_name]
                 _, many_classes, family_factories = spec.complexity_scenarios[0]
                 model = build_model(many_classes, family_factories)
-                true_model = build_true_model(many_classes, family_factories, sigma=0.1, seed=3)
+                true_model = build_true_model(many_classes, family_factories, sigma=0.1, seed=3, sampler=spec.sampler)
                 x, y = collect_sample(true_model, size=8, batch=4, seed=5)
 
                 self.assertEqual(x.shape, (8, model.observation_dim))
@@ -119,6 +130,10 @@ class EFGridExperimentTests(unittest.TestCase):
         for block in true_model.beta_blocks:
             self.assertTrue(np.all(np.isfinite(block)))
 
+    def test_true_model_rejects_unknown_sampler(self):
+        with self.assertRaisesRegex(ValueError, "unsupported synthetic sampler"):
+            build_true_model(3, (GaussianKnownVarianceCoordinate,), sigma=0.1, seed=3, sampler="unknown")
+
     def test_constrained_generation_folds_instead_of_clipping_to_boundary(self):
         class FixedRng:
             def normal(self, _mean, _sigma, size):
@@ -150,6 +165,10 @@ class EFGridExperimentTests(unittest.TestCase):
 
         def fake_collect_sample(_model, size, batch, seed):
             return np.array([[float(seed)]]), np.array([size + batch])
+
+        def fake_build_true_model(_many_classes, _family_factories, _sigma, seed, sampler):
+            captured["sampler"] = sampler
+            return SimpleNamespace(eta=None)
 
         def fake_choose_best_lr(
             _algorithm_class,
@@ -197,7 +216,7 @@ class EFGridExperimentTests(unittest.TestCase):
 
         with patch.object(ef_grid, "ENTROPY_SCENARIOS", (("Entropy", 0.1),)), \
             patch.object(ef_grid, "ALGORITHMS", (("ALG", object),)), \
-            patch.object(ef_grid, "build_true_model", return_value=SimpleNamespace(eta=None)), \
+            patch.object(ef_grid, "build_true_model", side_effect=fake_build_true_model), \
             patch.object(ef_grid, "collect_sample", side_effect=fake_collect_sample), \
             patch.object(ef_grid, "validation_nll", return_value=0.0), \
             patch.object(ef_grid, "choose_best_lr", side_effect=fake_choose_best_lr), \
@@ -219,6 +238,7 @@ class EFGridExperimentTests(unittest.TestCase):
                 progress_bar=False,
             )
 
+        self.assertEqual(captured["sampler"], MATCHED_SAMPLER)
         self.assertEqual(captured["lr_validation_size_marker"], 1030)
         self.assertEqual(captured["lr_train_size_marker"], 1020)
         self.assertEqual(captured["evaluation_size_marker"], 101000)

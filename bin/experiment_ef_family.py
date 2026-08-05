@@ -7,7 +7,7 @@ from src.experiments.ef_grid import (
     DEFAULT_LR_VALIDATION_SIZE,
     run_grid_experiment,
 )
-from src.experiments.ef_specs import FAMILY_EXPERIMENT_SPECS, PURE_FAMILY_KEYS
+from src.experiments.ef_specs import FAMILY_EXPERIMENT_SPECS, PURE_FAMILY_KEYS, SUPPORTED_SYNTHETIC_SAMPLERS
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -38,6 +38,12 @@ def parse_args():
         help="Fresh held-out sample used only for final reported curves.",
     )
     parser.add_argument("--many-experiments", type=int, default=1)
+    parser.add_argument(
+        "--sampler",
+        choices=SUPPORTED_SYNTHETIC_SAMPLERS,
+        default=None,
+        help="Synthetic data-generating regime. The default uses each experiment spec.",
+    )
     parser.add_argument("--no-progress", action="store_true")
     return parser.parse_args()
 
@@ -54,6 +60,7 @@ def run_family(name, args):
         eval_validation_size=args.eval_validation_size,
         many_experiments=args.many_experiments,
         progress_bar=not args.no_progress,
+        sampler=args.sampler,
     )
 
 

@@ -20,6 +20,7 @@ from src.families import (
     MultivariateGaussianCoordinate,
 )
 from src.grapher import color, linestyles
+from src.experiments.ef_specs import MATCHED_SAMPLER
 from src.model.naive_bayes_ef import NaiveBayesEF
 
 
@@ -70,7 +71,7 @@ def fold_to_natural_domain(family, natural_parameter):
     return theta
 
 
-def build_true_model(many_classes, family_factories, sigma, seed):
+def build_matched_true_model(many_classes, family_factories, sigma, seed):
     rng = np.random.default_rng(seed)
     model = build_model(many_classes, family_factories)
     alpha = rng.normal(0.0, sigma, size=many_classes - 1)
@@ -80,6 +81,12 @@ def build_true_model(many_classes, family_factories, sigma, seed):
     ]
     model.set_eta((alpha, beta_blocks))
     return model
+
+
+def build_true_model(many_classes, family_factories, sigma, seed, sampler=MATCHED_SAMPLER):
+    if sampler == MATCHED_SAMPLER:
+        return build_matched_true_model(many_classes, family_factories, sigma, seed)
+    raise ValueError(f"unsupported synthetic sampler: {sampler}")
 
 
 def collect_sample(model, size, batch, seed):
@@ -235,7 +242,7 @@ def plot_grid(output_dir, output_name, x, median, lower, upper, complexity_label
 
 def save_summary(output_dir, rows):
     output_dir.mkdir(parents=True, exist_ok=True)
-    header = "family,complexity,entropy,experiment,algorithm,learning_rate_0,learning_rate_1,final_excess_nll"
+    header = "family,sampler,complexity,entropy,experiment,algorithm,learning_rate_0,learning_rate_1,final_excess_nll"
     lines = [header]
     for row in rows:
         lines.append(",".join(str(value) for value in row))
@@ -244,7 +251,7 @@ def save_summary(output_dir, rows):
 
 def save_curves(output_dir, rows):
     output_dir.mkdir(parents=True, exist_ok=True)
-    header = "family,complexity,entropy,experiment,algorithm,samples_seen,excess_evaluation_nll"
+    header = "family,sampler,complexity,entropy,experiment,algorithm,samples_seen,excess_evaluation_nll"
     lines = [header]
     for row in rows:
         lines.append(",".join(str(value) for value in row))
@@ -262,6 +269,7 @@ def run_grid_experiment(
     progress_bar=True,
     lr_validation_size=DEFAULT_LR_VALIDATION_SIZE,
     eval_validation_size=DEFAULT_EVAL_VALIDATION_SIZE,
+    sampler=None,
 ):
     if validation_size is not None:
         eval_validation_size = validation_size
@@ -272,6 +280,7 @@ def run_grid_experiment(
         output_dir = Path("outputs") / spec.default_output_dir
     else:
         output_dir = Path(output_dir)
+    sampler = spec.sampler if sampler is None else sampler
 
     x_axis = samples_seen(train_size, batch, ITER_KEEP)
     algorithm_labels = [name for name, _ in ALGORITHMS]
@@ -287,8 +296,9 @@ def run_grid_experiment(
             curves_by_algorithm = {name: [] for name, _ in ALGORITHMS}
             for exp_num in range(many_experiments):
                 logging.info(
-                    "Running family=%s complexity=%s entropy=%s experiment=%s",
+                    "Running family=%s sampler=%s complexity=%s entropy=%s experiment=%s",
                     spec.key,
+                    sampler,
                     complexity_name,
                     entropy_name,
                     exp_num,
@@ -298,6 +308,7 @@ def run_grid_experiment(
                     family_factories,
                     sigma,
                     seed=experiment_seed(0, row_index, col_index, exp_num),
+                    sampler=sampler,
                 )
                 x_lr_val, y_lr_val = collect_sample(
                     true_model,
@@ -353,11 +364,12 @@ def run_grid_experiment(
                         raise ValueError(f"curve length {len(curve)} does not match x-axis length {len(x_axis)}")
                     for samples, value in zip(x_axis, curve):
                         curve_rows.append(
-                            (spec.key, complexity_name, entropy_name, exp_num, algorithm_name, samples, value)
+                            (spec.key, sampler, complexity_name, entropy_name, exp_num, algorithm_name, samples, value)
                         )
                     summary_rows.append(
                         (
                             spec.key,
+                            sampler,
                             complexity_name,
                             entropy_name,
                             exp_num,
