@@ -34,7 +34,15 @@ class EFGridExperimentTests(unittest.TestCase):
             self.assertEqual(len(family_factories), 1)
             event_dims.append(family_factories[0]().event_dim)
 
-        self.assertEqual(event_dims, [2, 4, 6])
+        self.assertEqual(event_dims, [12, 23, 35])
+
+    def test_scalar_continuous_specs_use_comparable_variable_counts(self):
+        for family_name in ("gaussian", "poisson", "exponential"):
+            with self.subTest(family=family_name):
+                spec = FAMILY_EXPERIMENT_SPECS[family_name]
+                feature_counts = [len(family_factories) for _, _, family_factories in spec.complexity_scenarios]
+
+                self.assertEqual(feature_counts, [100, 500, 1200])
 
     def test_mixed_repeated_spec_repeats_all_family_types(self):
         spec = FAMILY_EXPERIMENT_SPECS["mixed_repeated"]

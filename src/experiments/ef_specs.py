@@ -49,10 +49,26 @@ def paper_discrete_layouts():
     )
 
 
+def comparable_scalar_layouts():
+    return (
+        ("M1", 10, 100),
+        ("M2", 20, 500),
+        ("M3", 30, 1200),
+    )
+
+
+def comparable_multivariate_layouts():
+    return (
+        ("M1", 10, 12),
+        ("M2", 20, 23),
+        ("M3", 30, 35),
+    )
+
+
 def repeated_family_scenarios(factory):
     return tuple(
-        (name, many_classes, tuple(factory for _ in feature_values))
-        for name, many_classes, feature_values in paper_discrete_layouts()
+        (name, many_classes, tuple(factory for _ in range(feature_count)))
+        for name, many_classes, feature_count in comparable_scalar_layouts()
     )
 
 
@@ -65,8 +81,8 @@ def categorical_scenarios():
 
 def multivariate_gaussian_scenarios():
     return tuple(
-        (name, many_classes, (multivariate_gaussian(len(feature_values)),))
-        for name, many_classes, feature_values in paper_discrete_layouts()
+        (name, many_classes, (multivariate_gaussian(event_dim),))
+        for name, many_classes, event_dim in comparable_multivariate_layouts()
     )
 
 
