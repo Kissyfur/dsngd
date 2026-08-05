@@ -50,19 +50,34 @@ def paper_discrete_layouts():
 
 
 def comparable_scalar_layouts():
-    return (
-        ("M1", 10, 100),
-        ("M2", 20, 500),
-        ("M3", 30, 1200),
+    return tuple(
+        (name, many_classes, sum(value - 1 for value in feature_values))
+        for name, many_classes, feature_values in paper_discrete_layouts()
     )
 
 
 def comparable_multivariate_layouts():
-    return (
-        ("M1", 10, 12),
-        ("M2", 20, 23),
-        ("M3", 30, 35),
+    return tuple(
+        (
+            name,
+            many_classes,
+            closest_multivariate_event_dim(sum(value - 1 for value in feature_values)),
+        )
+        for name, many_classes, feature_values in paper_discrete_layouts()
     )
+
+
+def closest_multivariate_event_dim(target_feature_dim):
+    event_dim = 1
+    while event_dim + event_dim * event_dim < target_feature_dim:
+        event_dim += 1
+    lower = event_dim - 1
+    if lower > 0:
+        lower_dim = lower + lower * lower
+        upper_dim = event_dim + event_dim * event_dim
+        if abs(lower_dim - target_feature_dim) <= abs(upper_dim - target_feature_dim):
+            return lower
+    return event_dim
 
 
 def repeated_family_scenarios(factory):
