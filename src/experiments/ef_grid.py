@@ -12,6 +12,7 @@ import numpy as np
 from src.algorithms.adagrad_ef import AdaGrad_NaiveBayesEF
 from src.algorithms.dsngd_ef import DSNGD_NaiveBayesEF
 from src.algorithms.sgd_ef import SGD_NaiveBayesEF
+from src.data.array_iterator import ArrayBatchIterator
 from src.data.ef_sample_creator import NaiveBayesEFSampleIterator
 from src.families import (
     ExponentialMeanCoordinate,
@@ -142,8 +143,8 @@ def samples_seen(train_size, batch, iter_keep=ITER_KEEP):
 def choose_best_lr(
     algorithm_class,
     model_factory,
-    true_model,
-    lr_train_size,
+    x_lr_train,
+    y_lr_train,
     batch,
     train_seed,
     x_lr_val,
@@ -153,11 +154,12 @@ def choose_best_lr(
     optimizer = algorithm_class(model_factory())
     data = {
         "model_factory": model_factory,
-        "sample_factory": lambda: NaiveBayesEFSampleIterator(
-            true_model,
-            epoch_length=lr_train_size,
+        "sample_factory": lambda: ArrayBatchIterator(
+            x_lr_train,
+            y_lr_train,
             epochs=1,
             batch=batch,
+            shuffle=False,
             random_seed=train_seed,
         ),
         "validation_curve": lambda fit_model, etas: validation_curve(fit_model, etas, x_lr_val, y_lr_val),
@@ -303,6 +305,12 @@ def run_grid_experiment(
                     batch=1000,
                     seed=experiment_seed(20_000, row_index, col_index, exp_num),
                 )
+                x_lr_train, y_lr_train = collect_sample(
+                    true_model,
+                    lr_size,
+                    batch=1000,
+                    seed=experiment_seed(60_000, row_index, col_index, exp_num),
+                )
                 x_eval, y_eval = collect_sample(
                     true_model,
                     eval_validation_size,
@@ -318,8 +326,8 @@ def run_grid_experiment(
                     lr = choose_best_lr(
                         algorithm_class,
                         model_factory,
-                        true_model,
-                        lr_size,
+                        x_lr_train,
+                        y_lr_train,
                         batch,
                         train_seed=train_seed,
                         x_lr_val=x_lr_val,

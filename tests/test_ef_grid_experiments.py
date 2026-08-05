@@ -154,8 +154,8 @@ class EFGridExperimentTests(unittest.TestCase):
         def fake_choose_best_lr(
             _algorithm_class,
             _model_factory,
-            _true_model,
-            _lr_train_size,
+            x_lr_train,
+            y_lr_train,
             _batch,
             train_seed,
             x_lr_val,
@@ -163,6 +163,8 @@ class EFGridExperimentTests(unittest.TestCase):
             progress_bar=True,
         ):
             captured["lr_train_seed"] = train_seed
+            captured["lr_train_sample_seed"] = int(x_lr_train[0, 0])
+            captured["lr_train_size_marker"] = int(y_lr_train[0])
             captured["lr_validation_seed"] = int(x_lr_val[0, 0])
             captured["lr_validation_size_marker"] = int(y_lr_val[0])
             return np.array([1.0, 1.0])
@@ -218,8 +220,10 @@ class EFGridExperimentTests(unittest.TestCase):
             )
 
         self.assertEqual(captured["lr_validation_size_marker"], 1030)
+        self.assertEqual(captured["lr_train_size_marker"], 1020)
         self.assertEqual(captured["evaluation_size_marker"], 101000)
         self.assertEqual(captured["lr_train_seed"], captured["final_train_seed"])
+        self.assertEqual(captured["lr_train_sample_seed"], captured["final_train_seed"])
         self.assertNotEqual(captured["lr_validation_seed"], captured["evaluation_seed"])
 
     def test_grid_experiment_rejects_lr_search_longer_than_training(self):
