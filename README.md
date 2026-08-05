@@ -90,6 +90,10 @@ Synthetic grid experiments use a matched sampler by default: the true
 data-generating model is drawn in the same exponential-family product manifold
 as the model being fitted. The CSV outputs include the sampler regime so future
 misspecified experiments can be compared explicitly.
+For synthetic grids, class priors are sampled explicitly and then encoded in
+`alpha`; conditional feature parameters are sampled in expectation coordinates
+with a dimension-normalized scale, so complexity does not accidentally make the
+same entropy label much more extreme.
 
 Prepare and run a first real-data MNIST experiment with:
 

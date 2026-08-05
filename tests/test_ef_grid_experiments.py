@@ -9,12 +9,12 @@ from src.experiments.ef_grid import (
     ALGORITHMS,
     DEFAULT_EVAL_VALIDATION_SIZE,
     DEFAULT_LR_VALIDATION_SIZE,
+    alpha_for_priors,
+    beta_scale,
     build_model,
     build_true_model,
     collect_sample,
-    fold_to_natural_domain,
     learning_rate_columns,
-    random_natural_block,
     samples_seen,
     validation_nll,
 )
@@ -25,7 +25,12 @@ from src.experiments.ef_specs import (
     PURE_FAMILY_KEYS,
     gaussian,
 )
-from src.families import ExponentialMeanCoordinate, GaussianKnownVarianceCoordinate, MultivariateGaussianCoordinate
+from src.families import (
+    ExponentialMeanCoordinate,
+    GaussianKnownVarianceCoordinate,
+    GaussianUnknownVarianceCoordinate,
+    MultivariateGaussianCoordinate,
+)
 
 
 class EFGridExperimentTests(unittest.TestCase):
@@ -87,6 +92,11 @@ class EFGridExperimentTests(unittest.TestCase):
     def test_learning_rate_columns_supports_single_parameter_schedules(self):
         self.assertEqual(learning_rate_columns(np.array([0.1])), (0.1, ""))
 
+    def test_beta_scale_normalizes_by_feature_dimension(self):
+        model = build_model(2, tuple(GaussianKnownVarianceCoordinate for _ in range(4)))
+
+        self.assertEqual(beta_scale(model, sigma=1.0), 0.5)
+
     def test_family_specs_build_valid_true_models_and_samples(self):
         for family_name in PURE_FAMILY_KEYS + ("mixed", "mixed_repeated"):
             with self.subTest(family=family_name):
@@ -101,12 +111,24 @@ class EFGridExperimentTests(unittest.TestCase):
                 self.assertTrue(np.all((0 <= y) & (y < many_classes)))
                 self.assertTrue(np.isfinite(validation_nll(true_model, true_model.eta, x, y)))
 
-    def test_true_model_draws_unconstrained_parameters_in_natural_coordinates(self):
+    def test_alpha_for_priors_sets_requested_class_probabilities(self):
+        family = GaussianKnownVarianceCoordinate()
+        model = build_model(3, (lambda: family,))
+        beta_blocks = [np.array([[0.1, -0.2, 0.3]])]
+        priors = np.array([0.2, 0.5, 0.3])
+
+        alpha = alpha_for_priors(model, priors, beta_blocks)
+        model.set_eta((alpha, beta_blocks))
+
+        np.testing.assert_allclose(model.class_probabilities(), priors)
+
+    def test_true_model_draws_conditionals_and_class_priors(self):
         sigma = 0.7
         seed = 13
         rng = np.random.default_rng(seed)
-        expected_alpha = rng.normal(0.0, sigma, size=2)
-        expected_beta = rng.normal(0.0, sigma, size=(3, 1))
+        expected_beta = np.vstack([rng.normal(0.0, sigma, size=1) for _ in range(3)])
+        prior_logits = rng.normal(0.0, sigma, size=3)
+        expected_priors = np.exp(prior_logits - np.log(np.sum(np.exp(prior_logits))))
 
         true_model = build_true_model(
             many_classes=3,
@@ -115,13 +137,35 @@ class EFGridExperimentTests(unittest.TestCase):
             seed=seed,
         )
 
-        np.testing.assert_allclose(true_model.alpha, expected_alpha)
         np.testing.assert_allclose(true_model.beta_blocks[0].T, expected_beta)
+        np.testing.assert_allclose(true_model.class_probabilities(), expected_priors)
 
-    def test_true_model_projects_constrained_natural_parameters(self):
+    def test_true_model_uses_dimension_normalized_conditional_scale(self):
+        sigma = 0.8
+        seed = 17
+        rng = np.random.default_rng(seed)
+        conditional_sigma = sigma / np.sqrt(2.0)
+        expected_first_block = np.vstack([rng.normal(0.0, conditional_sigma, size=1) for _ in range(3)])
+        expected_second_block = np.vstack([rng.normal(0.0, conditional_sigma, size=1) for _ in range(3)])
+
         true_model = build_true_model(
             many_classes=3,
-            family_factories=(ExponentialMeanCoordinate, lambda: MultivariateGaussianCoordinate(2)),
+            family_factories=tuple(GaussianKnownVarianceCoordinate for _ in range(2)),
+            sigma=sigma,
+            seed=seed,
+        )
+
+        np.testing.assert_allclose(true_model.beta_blocks[0].T, expected_first_block)
+        np.testing.assert_allclose(true_model.beta_blocks[1].T, expected_second_block)
+
+    def test_true_model_draws_valid_constrained_expectations(self):
+        true_model = build_true_model(
+            many_classes=3,
+            family_factories=(
+                ExponentialMeanCoordinate,
+                GaussianUnknownVarianceCoordinate,
+                lambda: MultivariateGaussianCoordinate(2),
+            ),
             sigma=1.0,
             seed=19,
         )
@@ -133,27 +177,6 @@ class EFGridExperimentTests(unittest.TestCase):
     def test_true_model_rejects_unknown_sampler(self):
         with self.assertRaisesRegex(ValueError, "unsupported synthetic sampler"):
             build_true_model(3, (GaussianKnownVarianceCoordinate,), sigma=0.1, seed=3, sampler="unknown")
-
-    def test_constrained_generation_folds_instead_of_clipping_to_boundary(self):
-        class FixedRng:
-            def normal(self, _mean, _sigma, size):
-                assert size == (3, 1)
-                return np.array([[2.0], [-0.5], [0.0]])
-
-        family = ExponentialMeanCoordinate(natural_margin=1e-6)
-        block = random_natural_block(family, many_classes=3, rng=FixedRng(), sigma=1.0)
-
-        np.testing.assert_allclose(block, np.array([[-1.0, -1.5, -1.0]]))
-
-    def test_multivariate_generation_folds_quadratic_eigenvalues(self):
-        family = MultivariateGaussianCoordinate(2)
-        raw = np.array([[0.0, 0.0, 1.0, 0.0, 0.0, 2.0]])
-
-        folded = fold_to_natural_domain(family, raw)
-        a = folded[0, family.event_dim :].reshape(family.event_dim, family.event_dim)
-
-        np.testing.assert_allclose(a, np.array([[-1.0, 0.0], [0.0, -2.0]]))
-        self.assertTrue(np.all(np.linalg.eigvalsh(a) < 0.0))
 
     def test_samples_seen_matches_kept_optimizer_history(self):
         x_axis = samples_seen(train_size=1000, batch=100, iter_keep=4)
