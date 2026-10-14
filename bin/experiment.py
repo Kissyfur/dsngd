@@ -55,11 +55,14 @@ def parse_args():
     return parser.parse_args()
 
 
-def save_curves(file_name, curves, lrs, labels, n):
+def save_curves(file_name, curves, lrs, times, labels, n):
     arrays = {f'curves_{i}_{j}': np.array([d[label] for label in labels]) for (i, j), d in curves.items()}
     np.savez(file_name + '.npz', labels=labels, n=n, **arrays,
              lrs=np.array([[i, j, exp_num, labels.index(name)] + list(np.atleast_1d(lr)) + [np.nan] * (2 - np.size(lr))
-                           for (i, j, exp_num, name), lr in lrs.items()]))
+                           for (i, j, exp_num, name), lr in lrs.items()]),
+             # manifold, entropy, experiment, algorithm, training seconds, microseconds per sample
+             times=np.array([[i, j, exp_num, labels.index(name), t, 1e6 * t / n]
+                             for (i, j, exp_num, name), t in times.items()]))
 
 
 if __name__ == "__main__":
@@ -75,6 +78,7 @@ if __name__ == "__main__":
     labels = [algo_class.CLASS_NAME for algo_class in algorithm_classes]
     curves = {}
     lrs = {}
+    times = {}
     problems = {}
     for i, (s, m) in enumerate(manifolds):
         for j, sigma_sq in enumerate(entropies):
@@ -99,10 +103,12 @@ if __name__ == "__main__":
                     model.compute_history_metrics(problem)
                     d[algo.CLASS_NAME].append(model.history['error'])
                     lrs[(i, j, exp_num, algo.CLASS_NAME)] = lr
-                    logging.info(f"{algo.CLASS_NAME} final error: {model.history['error'][-1]:.4e}")
+                    times[(i, j, exp_num, algo.CLASS_NAME)] = model.history['time']
+                    logging.info(f"{algo.CLASS_NAME} final error: {model.history['error'][-1]:.4e}, training time: "
+                                 f"{model.history['time']:.2f} s ({1e6 * model.history['time'] / (n * epochs):.2f} us/sample)")
             curves[(i, j)] = d
             if args.output:
-                save_curves(args.output, curves, lrs, labels, n)
+                save_curves(args.output, curves, lrs, times, labels, n)
 
     # (manifold, entropy, algorithm, experiment, checkpoint)
     errors = np.array([[[curves[(i, j)][label] for label in labels] for j in range(3)] for i in range(3)])

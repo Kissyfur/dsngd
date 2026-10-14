@@ -59,15 +59,16 @@ def parse_args():
 
 def save(file_name, x, results, title):
     np.savez(file_name + '.npz', x=x, **{f'{name}_{metric}': np.array(result[metric])
-                                       for name, result in results.items() for metric in ('log_loss', 'accuracy')})
+                                       for name, result in results.items() for metric in ('log_loss', 'accuracy', 'time')})
     lines = ['algorithm,seeds,learning_rates,test_log_loss_median,test_log_loss_q25,test_log_loss_q75,'
-             'test_accuracy_median,test_accuracy_q25,test_accuracy_q75']
+             'test_accuracy_median,test_accuracy_q25,test_accuracy_q75,training_seconds_median,us_per_sample_median']
     for name, result in results.items():
         log_loss, accuracy = np.array(result['log_loss'])[:, -1], np.array(result['accuracy'])[:, -1]
         lrs = ' '.join('/'.join(f'{v:g}' for v in np.atleast_1d(lr)) for lr in result['lr'])
+        seconds = np.median(result['time'])
         lines.append(f'{name},{len(log_loss)},{lrs},' + ','.join(f'{v:.6f}' for v in (
             np.median(log_loss), *np.percentile(log_loss, [25, 75]),
-            np.median(accuracy), *np.percentile(accuracy, [25, 75]))))
+            np.median(accuracy), *np.percentile(accuracy, [25, 75]), seconds, 1e6 * seconds / x[-1])))
     with open(file_name + '.csv', 'w') as file:
         file.write('\n'.join(lines) + '\n')
 
@@ -108,7 +109,7 @@ if __name__ == '__main__':
             f'{len(features)} features, {s} classes, {epochs} epochs'
     logging.info(title)
 
-    results = {name: {'log_loss': [], 'accuracy': [], 'lr': []} for name in args.algorithms}
+    results = {name: {'log_loss': [], 'accuracy': [], 'lr': [], 'time': []} for name in args.algorithms}
     for seed in range(args.seeds):
         sample = ArraySampleIterator(x_fit, y_fit, epochs=epochs, batch=batch, random_seed=seed)
         sample_lr = ArraySampleIterator(x_fit, y_fit, epochs=1, batch=batch, random_seed=seed, epoch_length=n_lr)
@@ -121,7 +122,10 @@ if __name__ == '__main__':
             results[name]['log_loss'].append(log_loss)
             results[name]['accuracy'].append(accuracy)
             results[name]['lr'].append(lr)
-            logging.info(f'{name} seed {seed}: test log-loss {log_loss[-1]:.4f}, test accuracy {accuracy[-1]:.4f}')
+            results[name]['time'].append(model.history['time'])
+            logging.info(f'{name} seed {seed}: test log-loss {log_loss[-1]:.4f}, test accuracy {accuracy[-1]:.4f}, '
+                         f'training time {model.history["time"]:.2f} s '
+                         f'({1e6 * model.history["time"] / (epochs * sample.epoch_length):.2f} us/sample)')
         # Samples seen at the kept iterations of the optimizers and at the end
         kept = np.arange(0, len(sample), max(len(sample) // 100, 1))
         x = np.append(kept * batch, epochs * sample.epoch_length)
