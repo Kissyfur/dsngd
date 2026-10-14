@@ -102,6 +102,10 @@ class ExponentialFamilyStatistic(Statistic):
     def max_entropy_dual(self, psi, many_classes):
         return psi / many_classes * self.expectation(self.initial_natural())[:, None]
 
+    def __repr__(self):
+        arguments = ', '.join(f'{key}={value}' for key, value in vars(self).items() if key not in ('dim', 'dual_dim'))
+        return f'{type(self).__name__}({arguments})'
+
 
 class GaussianStatistic(ExponentialFamilyStatistic):
     """Gaussian with known variance, theta = mean / variance."""
