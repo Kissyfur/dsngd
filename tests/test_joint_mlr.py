@@ -4,7 +4,9 @@ import numpy as np
 from scipy.special import softmax
 
 from src.algorithms.adaGrad import AdaGrad_JointMLR
+from src.algorithms.dsngd import DSNGD_JointMLR
 from src.algorithms.sgd import SGD_JointMLR
+from src.algorithms.sngd import SNGD_JointMLR
 from src.data.sample_creator import JointMLRSampleIterator
 from src.model.joint_mlr import JointMLR
 from src.model.statistic import (ExponentialStatistic, GaussianMeanVarianceStatistic, GaussianStatistic,
@@ -73,7 +75,8 @@ class JointMLRContinuousTests(unittest.TestCase):
     def test_short_fits_on_mixed_features_reduce_kl(self):
         problem = random_model(3, mixed_features(), 1., seed=8)
         sample = JointMLRSampleIterator(problem, 20000, 1, 100, random_seed=9)
-        for algo_class, lr in ((SGD_JointMLR, (0.01, 0.01)), (AdaGrad_JointMLR, 0.1)):
+        for algo_class, lr in ((SGD_JointMLR, (0.01, 0.01)), (AdaGrad_JointMLR, 0.1),
+                               (DSNGD_JointMLR, (0.001, 0.01)), (SNGD_JointMLR, (0.001, 0.01))):
             with self.subTest(algorithm=algo_class.CLASS_NAME):
                 model = JointMLR(3, mixed_features())
                 model.fit(sample, algo_class(model), lr=lr, iter_keep=10)

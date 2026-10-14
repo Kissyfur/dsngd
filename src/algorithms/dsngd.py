@@ -23,27 +23,17 @@ class DSNGD_JointMLR(LineSearch):
         x, y = sample
         alpha_dual, beta_dual = dual_parameter
         py_inv = np.sum(alpha_dual) / alpha_dual
-        D = (np.sum(alpha_dual) / beta_dual) #* py_inv
-        Di = []
-        start = 0
-        for mi in self.model.T.m:
-            Di.append(D[start:start+mi, :])
-            start += mi
 
         q_minus_e = self.model.conditional_probabilities(x, [eta])[0] - self.model.S.identity(y)
 
         ng_alpha = np.sum(q_minus_e, axis=0) * py_inv * (1-self.model.T.r)
         ng_beta = None
-        for i in range(self.model.T.r):
+        for i, (feature_statistic_i, _, dual_rows) in enumerate(self.model.T.slices()):
             xi = x[:, i]
-            feature_statistic_i = self.model.T.canonical_statistics[i]
-            taux = feature_statistic_i.tau(xi)
-            D_q = Di[i][xi] * q_minus_e
-            block = np.dot(taux.T, D_q)
+            # beta block of the feature and its term u * q * (1 - <theta*_i, g_i>) of the alpha block
+            block, alpha_i = feature_statistic_i.dsngd_terms(xi, beta_dual[dual_rows], alpha_dual, q_minus_e)
             ng_beta = block if ng_beta is None else np.vstack([ng_beta, block])
-
-            xi_m = xi == feature_statistic_i.dim
-            ng_alpha += np.sum(D_q[xi_m], axis=0)
+            ng_alpha += alpha_i
 
         ng_alpha = ng_alpha[:-1] - ng_alpha[-1]
         return ng_alpha, ng_beta
@@ -73,14 +63,10 @@ class DSNGD_JointMLR(LineSearch):
         return etas
 
     def max_entropy_dual_parameter(self):
-        psi = self.model.T.psi * self.model.S.many_values
-        psi = (np.sum(self.model.T.m) - self.model.T.r + 1)  * self.model.S.many_values
+        psi = (self.model.T.dim + 1) * self.model.S.many_values
         alpha_dual = np.ones(self.model.S.many_values) * psi / self.model.S.many_values
-        beta_dual = np.ones((np.sum(self.model.T.m), self.model.S.many_values))
-        start = 0
-        for i in range(self.model.T.r):
-            end = start + (self.model.T.m[i])
-            beta_dual[start:end, :] = psi / (self.model.T.m[i] * self.model.S.many_values)
-            start = end
+        beta_dual = np.ones((self.model.T.dual_dim, self.model.S.many_values))
+        for feature_statistic_i, _, dual_rows in self.model.T.slices():
+            beta_dual[dual_rows, :] = feature_statistic_i.max_entropy_dual(psi, self.model.S.many_values)
         # dual_p = np.random.random((self.cp.y_dimension,self.dp.x_dimension))
         return alpha_dual, beta_dual
