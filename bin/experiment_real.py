@@ -64,7 +64,7 @@ def save(file_name, x, results, title):
              'test_accuracy_median,test_accuracy_q25,test_accuracy_q75']
     for name, result in results.items():
         log_loss, accuracy = np.array(result['log_loss'])[:, -1], np.array(result['accuracy'])[:, -1]
-        lrs = ' '.join(str(np.round(np.atleast_1d(lr), 6).tolist()) for lr in result['lr'])
+        lrs = ' '.join('/'.join(f'{v:g}' for v in np.atleast_1d(lr)) for lr in result['lr'])
         lines.append(f'{name},{len(log_loss)},{lrs},' + ','.join(f'{v:.6f}' for v in (
             np.median(log_loss), *np.percentile(log_loss, [25, 75]),
             np.median(accuracy), *np.percentile(accuracy, [25, 75]))))
