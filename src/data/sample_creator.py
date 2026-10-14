@@ -15,6 +15,12 @@ class JointMLRSampleIterator:
         self.random_seed_epoch = random_seed_epoch
 
     def __iter__(self):
+        if not self.model.T.discrete:
+            # Continuous features: fresh draws from the model
+            self.rng = np.random.default_rng(self.random_seed)
+            self.current_epoch = 0
+            self.current_epoch_length = 0
+            return self
         if self.model.pyx is None:
             self.model.set_pyx()
         pyx = self.model.pyx.flatten()
@@ -30,10 +36,15 @@ class JointMLRSampleIterator:
         if self.current_epoch_length >= self.epoch_length:
             self.current_epoch_length = 0
             self.current_epoch += 1
-            np.random.seed(self.random_seed_epoch + self.current_epoch)
-            np.random.shuffle(self.indices)
+            if self.model.T.discrete:
+                np.random.seed(self.random_seed_epoch + self.current_epoch)
+                np.random.shuffle(self.indices)
         if self.current_epoch >= self.epochs:
             raise StopIteration
+        if not self.model.T.discrete:
+            n = min(self.batch, self.epoch_length - self.current_epoch_length)
+            self.current_epoch_length += self.batch
+            return self.model.sample(n, self.rng)
         batch_indices = self.indices[self.current_epoch_length: self.current_epoch_length + self.batch]
         x_indices = batch_indices // self.model.S.many_values
         x = self.x[x_indices]
