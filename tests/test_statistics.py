@@ -36,16 +36,16 @@ class ExponentialFamilyStatisticTests(unittest.TestCase):
             with self.subTest(family=name):
                 theta_star = family.expectation(theta)
                 hessian = finite_difference_jacobian(family.expectation, theta)
-                expected = np.linalg.solve(hessian, (family.transform(x) - theta_star).T).T
-                score = family.dual_score(x, theta_star[None, :])
-                self.assertEqual(score.shape, (len(x), 1, family.dim))
-                np.testing.assert_allclose(score[:, 0, :], expected, rtol=1e-5, atol=1e-8)
+                expected = np.linalg.solve(hessian, (family.transform(x) - theta_star).T)
+                score = family.dual_score(x, theta_star[:, None])
+                self.assertEqual(score.shape, (family.dim, len(x), 1))
+                np.testing.assert_allclose(score[:, :, 0], expected, rtol=1e-5, atol=1e-8)
 
     def test_samples_match_expectation(self):
         rng = np.random.default_rng(0)
         for name, (family, theta) in FAMILIES.items():
             with self.subTest(family=name):
-                statistics = family.transform(family.sample(np.tile(theta, (200000, 1)), rng))
+                statistics = family.transform(family.sample(np.tile(theta[:, None], (1, 200000)), rng))
                 standard_error = statistics.std(axis=0) / np.sqrt(len(statistics))
                 np.testing.assert_array_less(np.abs(statistics.mean(axis=0) - family.expectation(theta)),
                                              5 * standard_error)
@@ -56,7 +56,7 @@ class ExponentialFamilyStatisticTests(unittest.TestCase):
             with self.subTest(family=name):
                 theta = family.random_natural(z[:family.dim])
                 self.assertEqual(theta.shape, (family.dim, 50))
-                self.assertTrue(np.all(np.isfinite(family.log_partition(theta.T))))
+                self.assertTrue(np.all(np.isfinite(family.log_partition(theta))))
 
 
 class CanonicalStatisticTests(unittest.TestCase):
@@ -65,7 +65,7 @@ class CanonicalStatisticTests(unittest.TestCase):
         theta = np.array([0.5, -1., 0.2])
         probabilities = statistic.expectation(theta)
         np.testing.assert_allclose(probabilities, np.exp(np.append(theta, 0.)) / np.sum(np.exp(np.append(theta, 0.))))
-        values = statistic.sample(np.tile(theta, (100000, 1)), np.random.default_rng(2))
+        values = statistic.sample(np.tile(theta[:, None], (1, 100000)), np.random.default_rng(2))
         np.testing.assert_allclose(np.bincount(values, minlength=4) / len(values), probabilities, atol=0.01)
 
     def test_dsngd_terms_match_generic_formula_with_categorical_score(self):
@@ -81,12 +81,12 @@ class CanonicalStatisticTests(unittest.TestCase):
         block, alpha_term = statistic.dsngd_terms(x, dual, alpha_dual, q_minus_e)
 
         p = dual / alpha_dual
-        theta_star = p[:-1].T
-        g = (np.eye(many_values)[x][:, None, :-1] / p[:-1].T[None]
-             - (x == many_values - 1)[:, None, None] / p[-1][None, :, None])
+        theta_star = p[:-1]
+        g = (np.eye(many_values)[x].T[:-1, :, None] / theta_star[:, None, :]
+             - (x == many_values - 1)[None, :, None] / p[-1])
         u_q = q_minus_e * np.sum(alpha_dual) / alpha_dual
-        np.testing.assert_allclose(block, np.einsum('ncd,nc->dc', g, u_q))
-        w = 1. - np.einsum('cd,ncd->nc', theta_star, g)
+        np.testing.assert_allclose(block, np.sum(g * u_q, axis=1))
+        w = 1. - np.sum(theta_star[:, None, :] * g, axis=0)
         np.testing.assert_allclose(alpha_term, np.sum(w * u_q, axis=0))
 
 

@@ -27,7 +27,7 @@ def log_partition_gradient(model, eta):
     p = model.class_probabilities(eta)
     blocks = []
     for cs, rows, _ in model.T.slices():
-        expectation = cs.expectation(eta[1][rows].T).T
+        expectation = cs.expectation(eta[1][rows])
         blocks.append(expectation[:cs.dim] * p)
     return flatten((p[:-1], np.vstack(blocks)))
 

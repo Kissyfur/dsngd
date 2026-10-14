@@ -50,13 +50,13 @@ class CanonicalStatistic(Statistic):
         return self.canonical_statistic(rv)
 
     def log_partition(self, theta):
-        logits = np.concatenate([theta, np.zeros(theta.shape[:-1] + (1,))], axis=-1)
-        return logsumexp(logits, axis=-1)
+        logits = np.concatenate([theta, np.zeros((1,) + theta.shape[1:])])
+        return logsumexp(logits, axis=0)
 
     def expectation(self, theta):
         # Probabilities of all the values, the expectation of identity
-        logits = np.concatenate([theta, np.zeros(theta.shape[:-1] + (1,))], axis=-1)
-        return np.exp(logits - logsumexp(logits, axis=-1, keepdims=True))
+        logits = np.concatenate([theta, np.zeros((1,) + theta.shape[1:])])
+        return np.exp(logits - logsumexp(logits, axis=0))
 
     def initial_natural(self):
         return np.zeros(self.dim)
@@ -65,8 +65,8 @@ class CanonicalStatistic(Statistic):
         return z
 
     def sample(self, theta, rng):
-        cumulative = np.cumsum(self.expectation(theta), axis=-1)
-        values = np.sum(cumulative < rng.random((len(theta), 1)), axis=-1)
+        cumulative = np.cumsum(self.expectation(theta), axis=0)
+        values = np.sum(cumulative < rng.random(theta.shape[1]), axis=0)
         return np.minimum(values, self.dim)
 
     def dsngd_terms(self, x, dual, alpha_dual, q_minus_e):
@@ -84,8 +84,8 @@ class ExponentialFamilyStatistic(Statistic):
     """Feature following an exponential family f(x; theta) with sufficient statistic T(x).
 
     The family enters DSNGD only through the score in expectation coordinates
-    g(x, theta*) = grad_{theta*} log f(x; theta*), see dual_score. Parameters are arrays whose last
-    axis has length dim.
+    g(x, theta*) = grad_{theta*} log f(x; theta*), see dual_score. Parameters are laid out like beta: the
+    components of the statistic along the first axis and one column per class (or observation).
     """
 
     def transform(self, rv):
@@ -93,11 +93,11 @@ class ExponentialFamilyStatistic(Statistic):
 
     def dsngd_terms(self, x, dual, alpha_dual, q_minus_e):
         u_q = q_minus_e * (np.sum(alpha_dual) / alpha_dual)
-        theta_star = (dual / alpha_dual).T
+        theta_star = dual / alpha_dual
         g = self.dual_score(np.asarray(x, dtype=float), theta_star)
-        block = np.einsum('ncd,nc->dc', g, u_q)
-        w = 1. - np.einsum('cd,ncd->nc', theta_star, g)
-        return block, np.sum(w * u_q, axis=0)
+        block = np.sum(g * u_q, axis=1)
+        # Sum over the observations of u * q * (1 - <theta*, g>), as theta* does not depend on them
+        return block, np.sum(u_q, axis=0) - np.sum(theta_star * block, axis=0)
 
     def max_entropy_dual(self, psi, many_classes):
         return psi / many_classes * self.expectation(self.initial_natural())[:, None]
@@ -115,13 +115,13 @@ class GaussianStatistic(ExponentialFamilyStatistic):
         self.variance = variance
 
     def log_partition(self, theta):
-        return 0.5 * self.variance * theta[..., 0] ** 2
+        return 0.5 * self.variance * theta[0] ** 2
 
     def expectation(self, theta):
         return self.variance * theta
 
     def dual_score(self, x, theta_star):
-        return ((x[:, None] - theta_star[None, :, 0]) / self.variance)[..., None]
+        return ((x[:, None] - theta_star[0]) / self.variance)[None]
 
     def initial_natural(self):
         return np.zeros(1)
@@ -130,7 +130,7 @@ class GaussianStatistic(ExponentialFamilyStatistic):
         return z
 
     def sample(self, theta, rng):
-        return rng.normal(self.variance * theta[:, 0], np.sqrt(self.variance))
+        return rng.normal(self.variance * theta[0], np.sqrt(self.variance))
 
 
 class GaussianMeanVarianceStatistic(ExponentialFamilyStatistic):
@@ -144,19 +144,18 @@ class GaussianMeanVarianceStatistic(ExponentialFamilyStatistic):
         return np.column_stack([rv, rv * rv])
 
     def log_partition(self, theta):
-        return -theta[..., 0] ** 2 / (4. * theta[..., 1]) + 0.5 * np.log(-np.pi / theta[..., 1])
+        return -theta[0] ** 2 / (4. * theta[1]) + 0.5 * np.log(-np.pi / theta[1])
 
     def expectation(self, theta):
-        mean, var = -theta[..., 0] / (2. * theta[..., 1]), -0.5 / theta[..., 1]
-        return np.stack([mean, mean * mean + var], axis=-1)
+        mean, var = -theta[0] / (2. * theta[1]), -0.5 / theta[1]
+        return np.stack([mean, mean * mean + var])
 
     def dual_score(self, x, theta_star):
-        mean = theta_star[None, :, 0]
-        var = theta_star[None, :, 1] - mean * mean
+        mean, var = theta_star[0], theta_star[1] - theta_star[0] ** 2
         residual = x[:, None] - mean
         g_second = 0.5 * (residual * residual / var - 1.) / var
         g_mean = residual / var - 2. * mean * g_second
-        return np.stack([g_mean, g_second], axis=-1)
+        return np.stack([g_mean, g_second])
 
     def initial_natural(self):
         return np.array([0., -0.5])
@@ -166,8 +165,8 @@ class GaussianMeanVarianceStatistic(ExponentialFamilyStatistic):
         return np.stack([mean / var, -0.5 / var])
 
     def sample(self, theta, rng):
-        var = -0.5 / theta[:, 1]
-        return rng.normal(var * theta[:, 0], np.sqrt(var))
+        var = -0.5 / theta[1]
+        return rng.normal(var * theta[0], np.sqrt(var))
 
 
 class PoissonStatistic(ExponentialFamilyStatistic):
@@ -177,13 +176,13 @@ class PoissonStatistic(ExponentialFamilyStatistic):
         super().__init__(1)
 
     def log_partition(self, theta):
-        return np.exp(theta[..., 0])
+        return np.exp(theta[0])
 
     def expectation(self, theta):
         return np.exp(theta)
 
     def dual_score(self, x, theta_star):
-        return (x[:, None] / theta_star[None, :, 0] - 1.)[..., None]
+        return (x[:, None] / theta_star[0] - 1.)[None]
 
     def initial_natural(self):
         return np.zeros(1)
@@ -192,7 +191,7 @@ class PoissonStatistic(ExponentialFamilyStatistic):
         return z
 
     def sample(self, theta, rng):
-        return rng.poisson(np.exp(theta[:, 0])).astype(float)
+        return rng.poisson(np.exp(theta[0])).astype(float)
 
 
 class ExponentialStatistic(ExponentialFamilyStatistic):
@@ -202,14 +201,14 @@ class ExponentialStatistic(ExponentialFamilyStatistic):
         super().__init__(1)
 
     def log_partition(self, theta):
-        return -np.log(-theta[..., 0])
+        return -np.log(-theta[0])
 
     def expectation(self, theta):
         return -1. / theta
 
     def dual_score(self, x, theta_star):
-        mean = theta_star[None, :, 0]
-        return (x[:, None] / (mean * mean) - 1. / mean)[..., None]
+        mean = theta_star[0]
+        return (x[:, None] / (mean * mean) - 1. / mean)[None]
 
     def initial_natural(self):
         return -np.ones(1)
@@ -218,7 +217,7 @@ class ExponentialStatistic(ExponentialFamilyStatistic):
         return -np.exp(z)
 
     def sample(self, theta, rng):
-        return rng.exponential(-1. / theta[:, 0])
+        return rng.exponential(-1. / theta[0])
 
 
 class CanonicalFeatureStatistic(Statistic):
@@ -255,11 +254,11 @@ class CanonicalFeatureStatistic(Statistic):
         log_partition = np.zeros(beta.shape[1])
         for cs, rows, _ in self.slices():
             if discrete or not cs.discrete:
-                log_partition += cs.log_partition(beta[rows].T)
+                log_partition += cs.log_partition(beta[rows])
         return log_partition
 
     def expectation(self, beta):
-        return np.vstack([cs.expectation(beta[rows].T).T for cs, rows, _ in self.slices()])
+        return np.vstack([cs.expectation(beta[rows]) for cs, rows, _ in self.slices()])
 
     def initial_natural(self):
         return np.concatenate([cs.initial_natural() for cs in self.canonical_statistics])
@@ -272,7 +271,7 @@ class CanonicalFeatureStatistic(Statistic):
 
     def sample(self, beta, rng):
         # One observation for each column of beta
-        return np.column_stack([cs.sample(beta[rows].T, rng) for cs, rows, _ in self.slices()])
+        return np.column_stack([cs.sample(beta[rows], rng) for cs, rows, _ in self.slices()])
 
 
 
