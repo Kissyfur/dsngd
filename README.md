@@ -45,7 +45,9 @@ _Dual Stochastic Natural Gradient Descent for Continuous Exponential Families_:
 - `GaussianMeanVarianceStatistic()`: Gaussian with unknown mean and variance,
 - `PoissonStatistic()` and `ExponentialStatistic()`.
 
-They can be mixed in the same feature vector, and all the algorithms (SGD, AdaGrad, DSNGD and SNGD) work with them:
+They can be mixed in the same feature vector, and all the algorithms (SGD, AdaGrad, DSNGD and SNGD) work with them.
+SNGD uses the exact dual of the current parameters, so it needs them to stay inside the domain of the families (for
+instance a negative natural parameter for the exponential family):
 
 ```python
 from src.model.joint_mlr import JointMLR
