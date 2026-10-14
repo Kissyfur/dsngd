@@ -148,7 +148,7 @@ class JointMLR:
                 err = np.sum(metric(etas[-5:]))
                 # logging.info(f"Learning rate: {lr} with error: {err} ")
 
-                if err < best_err:
+                if err < best_err or np.isnan(best_err):
                     best_lr = lr
                     best_err = err
             except (OverflowError, np.linalg.LinAlgError, FloatingPointError):
