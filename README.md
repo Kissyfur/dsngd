@@ -38,14 +38,19 @@ epochs = 1  # Repetitions of the sample
 
 ### Continuous and mixed features
 The features of the Naive Bayes model can follow any of these exponential families, as described in
-_Dual Stochastic Natural Gradient Descent for Continuous Exponential Families_:
+_Dual Stochastic Natural Gradient Descent for Continuous and Mixed Exponential Families_:
 
 - categorical, given by its number of values as in the discrete case (Bernoulli is `2`),
 - `GaussianStatistic(variance)`: Gaussian with known variance,
 - `GaussianMeanVarianceStatistic()`: Gaussian with unknown mean and variance,
-- `PoissonStatistic()` and `ExponentialStatistic()`.
+- `MultivariateGaussianStatistic(d)`: Gaussian vector of dimension `d` with unknown mean and covariance,
+- `PoissonStatistic()` and `ExponentialStatistic()`,
+- `GammaStatistic()`: Gamma with unknown shape and rate,
+- `BetaStatistic()` and `DirichletStatistic(K)`: Beta on (0, 1) and Dirichlet on the simplex of dimension `K`.
 
-They can be mixed in the same feature vector, and all the algorithms (SGD, AdaGrad, DSNGD and SNGD) work with them.
+Multivariate features (`MultivariateGaussianStatistic`, `DirichletStatistic`) take as many consecutive columns of the
+data as their dimension. Features can be mixed in the same feature vector, and all the algorithms (SGD, AdaGrad, DSNGD
+and SNGD) work with them.
 SNGD uses the exact dual of the current parameters, so it needs them to stay inside the domain of the families (for
 instance a negative natural parameter for the exponential family):
 
@@ -56,8 +61,11 @@ from src.model.statistic import GaussianMeanVarianceStatistic, PoissonStatistic
 model = JointMLR(10, [10, GaussianMeanVarianceStatistic(), PoissonStatistic()])
 ```
 
-DSNGD only needs from each family the score in expectation coordinates (`dual_score`); categorical features keep
-the original closed-form DSNGD terms, so the discrete case gives the same results as before. With continuous
+DSNGD only needs from each family the product of a vector by the Hessian of the conjugate of its log-partition at the
+expectation parameter (`dual_hessian_product`), which gives the score in expectation coordinates and lets DSNGD compute
+the direction of a mini-batch from the same sums of statistics as SGD. For the Gamma, Beta and Dirichlet families
+the natural parameters are recovered from the expectation parameters with a few Newton steps. Categorical features
+keep the original closed-form DSNGD terms, so the discrete case gives the same results as before. With continuous
 features the error is the KL divergence between the true and the estimated conditional distributions, computed on a
 Monte Carlo sample of x (exact over y).
 
@@ -71,14 +79,24 @@ PYTHONPATH=. python bin/experiment.py --output outputs/discrete
 PYTHONPATH=. python bin/experiment.py --features gaussian --output outputs/gaussian
 ```
 
-`--features` can be `discrete`, `gaussian`, `gaussian-mv`, `poisson`, `exponential` or `mixed` (each 5-valued
-feature replaced by Gaussian, Poisson and exponential features). The figure and the curves are saved in the given
+`--features` can be `discrete`, `gaussian`, `gaussian-mv`, `poisson`, `exponential`, `gamma`, `beta`,
+`multivariate-gaussian`, `dirichlet` or `mixed` (each 5-valued feature replaced by Gaussian, Poisson and exponential
+features). The figure and the curves are saved in the given
 path. The real data experiments use Covertype (continuous and categorical features) and MNIST (one Gaussian or
 Bernoulli feature per pixel), downloaded to `saved_data/`:
 
 ```bash
 PYTHONPATH=. python bin/experiment_real.py --dataset covertype --output outputs/covertype
 PYTHONPATH=. python bin/experiment_real.py --dataset mnist --output outputs/mnist
+```
+
+`bin/run_experiments.sh` runs all the experiments of the paper, `JOBS` at a time (6 by default), and
+`bin/summarize.py` prints the final errors, LaTeX rows for the tables of real data and computational time, and copies
+the figures to `manuscript/figures`:
+
+```bash
+JOBS=6 bin/run_experiments.sh python
+python bin/summarize.py
 ```
 
 Run the tests with `python -m unittest discover -s tests`.
