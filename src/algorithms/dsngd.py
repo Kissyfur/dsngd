@@ -28,8 +28,7 @@ class DSNGD_JointMLR(LineSearch):
 
         ng_alpha = np.sum(q_minus_e, axis=0) * py_inv * (1-self.model.T.r)
         ng_beta = None
-        for i, (feature_statistic_i, _, dual_rows) in enumerate(self.model.T.slices()):
-            xi = x[:, i]
+        for (feature_statistic_i, _, dual_rows), xi in zip(self.model.T.slices(), self.model.T.columns(x)):
             # beta block of the feature and its term u * q * (1 - <theta*_i, g_i>) of the alpha block
             block, alpha_i = feature_statistic_i.dsngd_terms(xi, beta_dual[dual_rows], alpha_dual, q_minus_e)
             ng_beta = block if ng_beta is None else np.vstack([ng_beta, block])

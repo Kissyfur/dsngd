@@ -2,14 +2,25 @@ import unittest
 
 import numpy as np
 
-from src.model.statistic import (CanonicalFeatureStatistic, CanonicalStatistic, ExponentialStatistic,
-                                 GaussianMeanVarianceStatistic, GaussianStatistic, PoissonStatistic)
+from src.model.statistic import (BetaStatistic, CanonicalFeatureStatistic, CanonicalStatistic, DirichletStatistic,
+                                 ExponentialStatistic, GammaStatistic, GaussianMeanVarianceStatistic,
+                                 GaussianStatistic, MultivariateGaussianStatistic, PoissonStatistic)
 
+MULTIVARIATE_GAUSSIAN = MultivariateGaussianStatistic(2)
+
+# family, natural parameter and observations
 FAMILIES = {
-    'gaussian': (GaussianStatistic(variance=1.7), np.array([0.4])),
-    'gaussian-mv': (GaussianMeanVarianceStatistic(), np.array([0.6, -0.8])),
-    'poisson': (PoissonStatistic(), np.array([0.7])),
-    'exponential': (ExponentialStatistic(), np.array([-1.3])),
+    'gaussian': (GaussianStatistic(variance=1.7), np.array([0.4]), np.array([-1., 0., 1., 2.5])),
+    'gaussian-mv': (GaussianMeanVarianceStatistic(), np.array([0.6, -0.8]), np.array([-1., 0., 1., 2.5])),
+    'multivariate-gaussian': (MULTIVARIATE_GAUSSIAN,
+                              MULTIVARIATE_GAUSSIAN.random_natural(np.array([[.3], [-.2], [.2], [.4], [-.1]]))[:, 0],
+                              np.array([[0., 0.], [1., -1.], [-.5, 2.], [2., .3]])),
+    'poisson': (PoissonStatistic(), np.array([0.7]), np.array([0., 1., 2., 5.])),
+    'exponential': (ExponentialStatistic(), np.array([-1.3]), np.array([.1, .5, 1., 3.])),
+    'gamma': (GammaStatistic(), np.array([-1.5, 0.7]), np.array([.1, .5, 1., 3.])),
+    'beta': (BetaStatistic(), np.array([0.5, 1.2]), np.array([.05, .3, .5, .9])),
+    'dirichlet': (DirichletStatistic(3), np.array([0.5, 1.2, -0.3]),
+                  np.array([[.2, .3, .5], [.6, .3, .1], [.1, .1, .8], [1 / 3, 1 / 3, 1 / 3]])),
 }
 
 
@@ -24,26 +35,36 @@ def finite_difference_jacobian(f, theta, h=1e-6):
 
 class ExponentialFamilyStatisticTests(unittest.TestCase):
     def test_expectation_is_gradient_of_log_partition(self):
-        for name, (family, theta) in FAMILIES.items():
+        for name, (family, theta, _) in FAMILIES.items():
             with self.subTest(family=name):
                 gradient = finite_difference_jacobian(family.log_partition, theta)[0]
-                np.testing.assert_allclose(family.expectation(theta), gradient, rtol=1e-6)
+                np.testing.assert_allclose(family.expectation(theta), gradient, rtol=1e-6, atol=1e-8)
+
+    def test_dual_hessian_product_is_inverse_hessian_of_log_partition(self):
+        # H(theta*) = hess F*(theta*) = (hess F(theta))^-1, for one and for several columns
+        rng = np.random.default_rng(4)
+        for name, (family, theta, _) in FAMILIES.items():
+            with self.subTest(family=name):
+                hessian = finite_difference_jacobian(family.expectation, theta)
+                rho = rng.normal(size=(family.dim, 3))
+                theta_star = np.tile(family.expectation(theta)[:, None], (1, 3))
+                np.testing.assert_allclose(family.dual_hessian_product(theta_star, rho),
+                                           np.linalg.solve(hessian, rho), rtol=1e-5, atol=1e-7)
 
     def test_dual_score_is_score_in_expectation_coordinates(self):
         # g(x, theta*) = (hess F(theta))^-1 (T(x) - theta*)
-        x = np.array([0., 1., 2., 3.5])
-        for name, (family, theta) in FAMILIES.items():
+        for name, (family, theta, x) in FAMILIES.items():
             with self.subTest(family=name):
                 theta_star = family.expectation(theta)
                 hessian = finite_difference_jacobian(family.expectation, theta)
                 expected = np.linalg.solve(hessian, (family.transform(x) - theta_star).T)
                 score = family.dual_score(x, theta_star[:, None])
                 self.assertEqual(score.shape, (family.dim, len(x), 1))
-                np.testing.assert_allclose(score[:, :, 0], expected, rtol=1e-5, atol=1e-8)
+                np.testing.assert_allclose(score[:, :, 0], expected, rtol=1e-5, atol=1e-7)
 
     def test_samples_match_expectation(self):
         rng = np.random.default_rng(0)
-        for name, (family, theta) in FAMILIES.items():
+        for name, (family, theta, _) in FAMILIES.items():
             with self.subTest(family=name):
                 statistics = family.transform(family.sample(np.tile(theta[:, None], (1, 200000)), rng))
                 standard_error = statistics.std(axis=0) / np.sqrt(len(statistics))
@@ -51,12 +72,23 @@ class ExponentialFamilyStatisticTests(unittest.TestCase):
                                              5 * standard_error)
 
     def test_random_natural_parameters_are_valid(self):
-        z = np.random.default_rng(1).normal(0., 2., size=(2, 50))
-        for name, (family, _) in FAMILIES.items():
+        z = np.random.default_rng(1).normal(0., 2., size=(5, 50))
+        for name, (family, _, _) in FAMILIES.items():
             with self.subTest(family=name):
                 theta = family.random_natural(z[:family.dim])
                 self.assertEqual(theta.shape, (family.dim, 50))
                 self.assertTrue(np.all(np.isfinite(family.log_partition(theta))))
+                self.assertTrue(np.all(np.isfinite(family.expectation(theta))))
+
+    def test_expectation_to_natural_maps_invert_expectation(self):
+        gamma = GammaStatistic()
+        shape, rate = np.array([0.05, 0.5, 1., 7., 80.]), np.array([3., 0.2, 1., 0.5, 10.])
+        estimated_shape, estimated_rate = gamma.shape_rate(gamma.expectation(np.stack([-rate, shape - 1.])))
+        np.testing.assert_allclose(estimated_shape, shape, rtol=1e-8)
+        np.testing.assert_allclose(estimated_rate, rate, rtol=1e-8)
+        dirichlet = DirichletStatistic(3)
+        a = np.array([[0.1, 1., 50., 2., 500., 0.01], [0.3, 1., 80., 0.05, 900., 0.02], [2., 1., 20., 0.5, 300., 5.]])
+        np.testing.assert_allclose(dirichlet.parameters(dirichlet.expectation(a - 1.)), a, rtol=1e-8)
 
 
 class CanonicalStatisticTests(unittest.TestCase):

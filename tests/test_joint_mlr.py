@@ -9,7 +9,8 @@ from src.algorithms.sgd import SGD_JointMLR
 from src.algorithms.sngd import SNGD_JointMLR
 from src.data.sample_creator import JointMLRSampleIterator
 from src.model.joint_mlr import JointMLR
-from src.model.statistic import (ExponentialStatistic, GaussianMeanVarianceStatistic, GaussianStatistic,
+from src.model.statistic import (BetaStatistic, DirichletStatistic, ExponentialStatistic, GammaStatistic,
+                                 GaussianMeanVarianceStatistic, GaussianStatistic, MultivariateGaussianStatistic,
                                  PoissonStatistic)
 
 
@@ -79,6 +80,25 @@ class JointMLRContinuousTests(unittest.TestCase):
                                (DSNGD_JointMLR, (0.001, 0.01)), (SNGD_JointMLR, (0.001, 0.01))):
             with self.subTest(algorithm=algo_class.CLASS_NAME):
                 model = JointMLR(3, mixed_features())
+                model.fit(sample, algo_class(model), lr=lr, iter_keep=10)
+                model.compute_history_metrics(problem)
+                error = model.history['error']
+                self.assertTrue(np.all(np.isfinite(error)))
+                self.assertLess(error[-1], 0.5 * error[0])
+
+
+    def test_multivariate_features_take_several_columns(self):
+        features = [3, MultivariateGaussianStatistic(2), GammaStatistic(), DirichletStatistic(3), BetaStatistic()]
+        problem = random_model(3, features, 1., seed=10)
+        x, y = problem.sample(1000, np.random.default_rng(11))
+        self.assertEqual(x.shape, (1000, 8))
+        self.assertEqual(problem.T.transform(x).shape, (1000, problem.T.dim))
+        np.testing.assert_allclose(np.sum(x[:, 4:7], axis=1), 1.)
+        self.assertTrue(np.all(x[:, 3] > 0) and np.all((x[:, 7] > 0) & (x[:, 7] < 1)))
+        sample = JointMLRSampleIterator(problem, 20000, 1, 100, random_seed=12)
+        for algo_class, lr in ((SGD_JointMLR, (0.01, 0.01)), (DSNGD_JointMLR, (0.001, 0.01))):
+            with self.subTest(algorithm=algo_class.CLASS_NAME):
+                model = JointMLR(3, features)
                 model.fit(sample, algo_class(model), lr=lr, iter_keep=10)
                 model.compute_history_metrics(problem)
                 error = model.history['error']

@@ -4,7 +4,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from src.model.joint_mlr import JointMLR
-from src.model.statistic import (ExponentialStatistic, GaussianMeanVarianceStatistic, GaussianStatistic,
+from src.model.statistic import (BetaStatistic, DirichletStatistic, ExponentialStatistic, GammaStatistic,
+                                 GaussianMeanVarianceStatistic, GaussianStatistic, MultivariateGaussianStatistic,
                                  PoissonStatistic)
 from src.data.sample_creator import JointMLRSampleIterator
 from tqdm import tqdm
@@ -20,7 +21,15 @@ logging.basicConfig(level=logging.INFO)
 ALGORITHMS = {algo_class.CLASS_NAME: algo_class
               for algo_class in [SGD_JointMLR, AdaGrad_JointMLR, DSNGD_JointMLR, SNGD_JointMLR]}
 FAMILIES = {'gaussian': GaussianStatistic, 'gaussian-mv': GaussianMeanVarianceStatistic,
-            'poisson': PoissonStatistic, 'exponential': ExponentialStatistic}
+            'poisson': PoissonStatistic, 'exponential': ExponentialStatistic, 'gamma': GammaStatistic,
+            'beta': BetaStatistic}
+# Features replacing each pair of categorical features with 10 and 5 values (statistic of dimension 13)
+BLOCKS = {
+    'mixed': lambda: [10, GaussianMeanVarianceStatistic(), PoissonStatistic(), ExponentialStatistic()],
+    'multivariate-gaussian': lambda: [MultivariateGaussianStatistic(3), MultivariateGaussianStatistic(1),
+                                      MultivariateGaussianStatistic(1)],
+    'dirichlet': lambda: [DirichletStatistic(5), DirichletStatistic(4), DirichletStatistic(4)],
+}
 
 
 def build_manifolds(features):
@@ -30,11 +39,11 @@ def build_manifolds(features):
     manifolds = [M_1, M_2, M_3]
     if features == 'discrete':
         return manifolds
-    if features == 'mixed':
-        # Each 5-valued feature is replaced by Gaussian (mean and variance), Poisson and exponential features,
-        # which keeps the dimension of the manifold
-        continuous = lambda: [GaussianMeanVarianceStatistic(), PoissonStatistic(), ExponentialStatistic()]
-        return [(s, sum([[v] if v == 10 else continuous() for v in m], [])) for s, m in manifolds]
+    if features in BLOCKS:
+        # Each pair of categorical features is replaced by a block of features, which keeps the dimension of the
+        # manifold. The mixed block keeps the 10-valued feature and replaces the 5-valued one by Gaussian (mean and
+        # variance), Poisson and exponential features.
+        return [(s, sum([BLOCKS[features]() for _ in range(len(m) // 2)], [])) for s, m in manifolds]
     # Features of one family, as many as needed to match the dimension of the discrete manifold
     family = FAMILIES[features]
     return [(s, [family() for _ in range(int(np.ceil(sum(v - 1 for v in m) / family().dim)))])
@@ -43,7 +52,7 @@ def build_manifolds(features):
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Compare the algorithms on the manifolds M1, M2 and M3.')
-    parser.add_argument('--features', choices=['discrete', 'mixed'] + list(FAMILIES), default='discrete')
+    parser.add_argument('--features', choices=['discrete'] + list(FAMILIES) + list(BLOCKS), default='discrete')
     parser.add_argument('--n', type=int, default=10000000, help='Length of the training sample')
     parser.add_argument('--n-lr', type=int, default=500 * 250, help='Length of the learning rate search sample')
     parser.add_argument('--experiments', type=int, default=1, help='Experiments per manifold and entropy')

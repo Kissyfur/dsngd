@@ -5,7 +5,8 @@ import numpy as np
 from src.algorithms.dsngd import DSNGD_JointMLR
 from src.algorithms.sgd import SGD_JointMLR
 from src.model.joint_mlr import JointMLR
-from src.model.statistic import (ExponentialStatistic, GaussianMeanVarianceStatistic, GaussianStatistic,
+from src.model.statistic import (BetaStatistic, DirichletStatistic, ExponentialStatistic, GammaStatistic,
+                                 GaussianMeanVarianceStatistic, GaussianStatistic, MultivariateGaussianStatistic,
                                  PoissonStatistic)
 
 MODELS = {
@@ -14,7 +15,12 @@ MODELS = {
     'gaussian-mv': [GaussianMeanVarianceStatistic()],
     'poisson': [PoissonStatistic(), PoissonStatistic()],
     'exponential': [ExponentialStatistic(), ExponentialStatistic()],
-    'mixed': [3, GaussianMeanVarianceStatistic(), PoissonStatistic(), ExponentialStatistic(), GaussianStatistic()],
+    'multivariate-gaussian': [MultivariateGaussianStatistic(2), MultivariateGaussianStatistic(1)],
+    'gamma': [GammaStatistic(), GammaStatistic()],
+    'beta': [BetaStatistic(), BetaStatistic()],
+    'dirichlet': [DirichletStatistic(3)],
+    'mixed': [3, GaussianMeanVarianceStatistic(), PoissonStatistic(), ExponentialStatistic(), GaussianStatistic(),
+              MultivariateGaussianStatistic(2), GammaStatistic(), BetaStatistic(), DirichletStatistic(3)],
 }
 
 
