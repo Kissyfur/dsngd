@@ -1,7 +1,7 @@
 import copy
 
 import numpy as np
-from scipy.special import digamma, gammaln, logsumexp, polygamma
+from scipy.special import digamma, gammaln, i0e, i1e, logsumexp, polygamma
 
 
 class Statistic:
@@ -278,6 +278,65 @@ class PoissonStatistic(ExponentialFamilyStatistic):
 
     def sample(self, theta, rng):
         return rng.poisson(np.exp(theta[0])).astype(float)
+
+
+class VonMisesStatistic(ExponentialFamilyStatistic):
+    """Von Mises distribution of an angle (in radians), T(x) = (cos x, sin x) and theta = kappa (cos mu, sin mu)."""
+
+    def __init__(self, newton_steps=10):
+        super().__init__(2)
+        self.newton_steps = newton_steps
+
+    def transform(self, rv):
+        rv = np.asarray(rv, dtype=float)
+        return np.column_stack([np.cos(rv), np.sin(rv)])
+
+    @staticmethod
+    def mean_resultant(kappa):
+        # A(kappa) = I_1(kappa) / I_0(kappa), the length of the expectation parameter
+        return i1e(kappa) / i0e(kappa)
+
+    def log_partition(self, theta):
+        kappa = np.sqrt(np.sum(theta * theta, axis=0))
+        return np.log(2. * np.pi) + np.log(i0e(kappa)) + kappa
+
+    def expectation(self, theta):
+        kappa = np.sqrt(np.sum(theta * theta, axis=0))
+        safe = np.maximum(kappa, 1e-12)
+        return theta * np.where(kappa > 1e-12, self.mean_resultant(safe) / safe, 0.5)
+
+    def concentration(self, length):
+        # Inverse of A by Newton's method, from the approximation of Banerjee et al. (2005)
+        kappa = length * (2. - length * length) / (1. - length * length)
+        for _ in range(self.newton_steps):
+            a = self.mean_resultant(kappa)
+            step = (a - length) / (1. - a / kappa - a * a)
+            kappa = np.maximum(kappa - step, 1e-12)
+            if np.max(np.abs(step / kappa)) < 1e-12:
+                break
+        return kappa
+
+    def dual_hessian_product(self, theta_star, rho):
+        # (hess F)^-1 rho with hess F = A'(kappa) u u^T + A(kappa) / kappa (I - u u^T), u the mean direction
+        theta_star, rho = np.broadcast_arrays(theta_star, rho)
+        length = np.sqrt(np.sum(theta_star * theta_star, axis=0))
+        safe = np.maximum(length, 1e-12)
+        kappa = self.concentration(safe)
+        a = self.mean_resultant(kappa)
+        u = theta_star / safe
+        radial = np.sum(u * rho, axis=0)
+        product = radial / (1. - a / kappa - a * a) * u + kappa / a * (rho - radial * u)
+        # At the uniform distribution the Hessian is I / 2
+        return np.where(length > 1e-12, product, 2. * rho)
+
+    def initial_natural(self):
+        return np.zeros(2)
+
+    def random_natural(self, z):
+        return z
+
+    def sample(self, theta, rng):
+        return rng.vonmises(np.arctan2(theta[1], theta[0]), np.sqrt(np.sum(theta * theta, axis=0)))
 
 
 class ExponentialStatistic(ExponentialFamilyStatistic):

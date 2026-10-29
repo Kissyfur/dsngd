@@ -7,7 +7,7 @@ from src.algorithms.sgd import SGD_JointMLR
 from src.model.joint_mlr import JointMLR
 from src.model.statistic import (BetaStatistic, DirichletStatistic, ExponentialStatistic, GammaStatistic,
                                  GaussianMeanVarianceStatistic, GaussianStatistic, MultivariateGaussianStatistic,
-                                 PoissonStatistic)
+                                 PoissonStatistic, VonMisesStatistic)
 
 MODELS = {
     'discrete': [2, 4, 3],
@@ -19,8 +19,10 @@ MODELS = {
     'gamma': [GammaStatistic(), GammaStatistic()],
     'beta': [BetaStatistic(), BetaStatistic()],
     'dirichlet': [DirichletStatistic(3)],
+    'von-mises': [VonMisesStatistic(), VonMisesStatistic()],
     'mixed': [3, GaussianMeanVarianceStatistic(), PoissonStatistic(), ExponentialStatistic(), GaussianStatistic(),
-              MultivariateGaussianStatistic(2), GammaStatistic(), BetaStatistic(), DirichletStatistic(3)],
+              MultivariateGaussianStatistic(2), GammaStatistic(), BetaStatistic(), DirichletStatistic(3),
+              VonMisesStatistic()],
 }
 
 

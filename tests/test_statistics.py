@@ -4,7 +4,8 @@ import numpy as np
 
 from src.model.statistic import (BetaStatistic, CanonicalFeatureStatistic, CanonicalStatistic, DirichletStatistic,
                                  ExponentialStatistic, GammaStatistic, GaussianMeanVarianceStatistic,
-                                 GaussianStatistic, MultivariateGaussianStatistic, PoissonStatistic)
+                                 GaussianStatistic, MultivariateGaussianStatistic, PoissonStatistic,
+                                 VonMisesStatistic)
 
 MULTIVARIATE_GAUSSIAN = MultivariateGaussianStatistic(2)
 
@@ -19,6 +20,7 @@ FAMILIES = {
     'exponential': (ExponentialStatistic(), np.array([-1.3]), np.array([.1, .5, 1., 3.])),
     'gamma': (GammaStatistic(), np.array([-1.5, 0.7]), np.array([.1, .5, 1., 3.])),
     'beta': (BetaStatistic(), np.array([0.5, 1.2]), np.array([.05, .3, .5, .9])),
+    'von-mises': (VonMisesStatistic(), np.array([0.8, -0.5]), np.array([-2., 0., 1., 3.])),
     'dirichlet': (DirichletStatistic(3), np.array([0.5, 1.2, -0.3]),
                   np.array([[.2, .3, .5], [.6, .3, .1], [.1, .1, .8], [1 / 3, 1 / 3, 1 / 3]])),
 }
@@ -89,6 +91,9 @@ class ExponentialFamilyStatisticTests(unittest.TestCase):
         dirichlet = DirichletStatistic(3)
         a = np.array([[0.1, 1., 50., 2., 500., 0.01], [0.3, 1., 80., 0.05, 900., 0.02], [2., 1., 20., 0.5, 300., 5.]])
         np.testing.assert_allclose(dirichlet.parameters(dirichlet.expectation(a - 1.)), a, rtol=1e-8)
+        von_mises = VonMisesStatistic()
+        kappa = np.array([1e-6, 0.01, 0.5, 2., 30., 3000.])
+        np.testing.assert_allclose(von_mises.concentration(von_mises.mean_resultant(kappa)), kappa, rtol=1e-6)
 
 
 class CanonicalStatisticTests(unittest.TestCase):
