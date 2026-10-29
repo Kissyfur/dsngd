@@ -46,7 +46,8 @@ _Dual Stochastic Natural Gradient Descent for Continuous and Mixed Exponential F
 - `MultivariateGaussianStatistic(d)`: Gaussian vector of dimension `d` with unknown mean and covariance,
 - `PoissonStatistic()` and `ExponentialStatistic()`,
 - `GammaStatistic()`: Gamma with unknown shape and rate,
-- `BetaStatistic()` and `DirichletStatistic(K)`: Beta on (0, 1) and Dirichlet on the simplex of dimension `K`.
+- `BetaStatistic()` and `DirichletStatistic(K)`: Beta on (0, 1) and Dirichlet on the simplex of dimension `K`,
+- `VonMisesStatistic()`: von Mises distribution of an angle in radians.
 
 Multivariate features (`MultivariateGaussianStatistic`, `DirichletStatistic`) take as many consecutive columns of the
 data as their dimension. Features can be mixed in the same feature vector, and all the algorithms (SGD, AdaGrad, DSNGD
@@ -82,12 +83,16 @@ PYTHONPATH=. python bin/experiment.py --features gaussian --output outputs/gauss
 `--features` can be `discrete`, `gaussian`, `gaussian-mv`, `poisson`, `exponential`, `gamma`, `beta`,
 `multivariate-gaussian`, `dirichlet` or `mixed` (each 5-valued feature replaced by Gaussian, Poisson and exponential
 features). The figure and the curves are saved in the given
-path. The real data experiments use Covertype (continuous and categorical features) and MNIST (one Gaussian or
-Bernoulli feature per pixel), downloaded to `saved_data/`:
+path. The real data experiments use Covertype and MNIST, downloaded to `saved_data/`, with `--features` choosing the model
+of the features. For Covertype, `natural` gives each variable a family according to its nature (Gaussian for elevation
+and vertical distance, von Mises for the aspect, Gamma for the slope and the distances, Beta for the hillshade indices
+and categorical for wilderness area and soil type) and `gaussian` uses Gaussians for all the continuous variables. For
+MNIST, `levels` models each pixel as a categorical variable with 13 intensity levels (59,169 parameters, as LeNet-5,
+whose accuracy is drawn on the figure), and `bernoulli` and `gaussian` model binarized or standardized pixels:
 
 ```bash
-PYTHONPATH=. python bin/experiment_real.py --dataset covertype --output outputs/covertype
-PYTHONPATH=. python bin/experiment_real.py --dataset mnist --output outputs/mnist
+PYTHONPATH=. python bin/experiment_real.py --dataset covertype --features natural --output outputs/real/covertype_natural
+PYTHONPATH=. python bin/experiment_real.py --dataset mnist --features levels --output outputs/real/mnist_levels
 ```
 
 `bin/run_experiments.sh` runs all the experiments of the paper, `JOBS` at a time (6 by default), and

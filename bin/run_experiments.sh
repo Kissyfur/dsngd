@@ -20,9 +20,10 @@ for features in discrete gaussian gaussian-mv poisson exponential gamma beta mul
     run outputs/synthetic/$features.log $PYTHON bin/experiment.py --features $features --experiments $EXPERIMENTS \
         --quiet --output outputs/synthetic/$features
 done
-run outputs/real/covertype.log $PYTHON bin/experiment_real.py --dataset covertype --quiet --output outputs/real/covertype
-run outputs/real/mnist_gaussian.log $PYTHON bin/experiment_real.py --dataset mnist --quiet \
-    --output outputs/real/mnist_gaussian
-run outputs/real/mnist_bernoulli.log $PYTHON bin/experiment_real.py --dataset mnist --mnist-features bernoulli --quiet \
-    --output outputs/real/mnist_bernoulli
+for design in covertype:natural covertype:gaussian mnist:levels mnist:bernoulli mnist:gaussian; do
+    dataset=${design%%:*}
+    features=${design##*:}
+    run outputs/real/${dataset}_$features.log $PYTHON bin/experiment_real.py --dataset $dataset --features $features \
+        --quiet --output outputs/real/${dataset}_$features
+done
 wait

@@ -7,7 +7,7 @@ import unittest
 import numpy as np
 
 from src.data.array_iterator import ArraySampleIterator
-from src.data.datasets import read_idx
+from src.data.datasets import intensity_levels, read_idx
 
 
 class ArraySampleIteratorTests(unittest.TestCase):
@@ -28,6 +28,13 @@ class ArraySampleIteratorTests(unittest.TestCase):
     def test_epoch_length_uses_part_of_the_data(self):
         sample = ArraySampleIterator(np.zeros((10, 1)), np.arange(10), batch=3, epoch_length=7)
         self.assertEqual([len(b[1]) for b in sample], [3, 3, 1])
+
+
+class IntensityLevelsTests(unittest.TestCase):
+    def test_levels_split_positive_intensities_in_equal_intervals(self):
+        x = np.array([0., 1., 21., 22., 23., 128., 254., 255.])
+        np.testing.assert_array_equal(intensity_levels(x, 13), [0, 1, 1, 1, 2, 6, 12, 12])
+        self.assertEqual(set(intensity_levels(np.arange(256.), 13)), set(range(13)))
 
 
 class ReadIdxTests(unittest.TestCase):
