@@ -119,6 +119,44 @@ class CanonicalStatisticTests(unittest.TestCase):
                                    atol=1e-12)
 
 
+class ExactSpeedUpTests(unittest.TestCase):
+    """The faster computations give the same numbers as the direct ones."""
+
+    def test_samplers_draw_the_numbers_of_the_general_samplers(self):
+        rng = np.random.default_rng(0)
+        theta = np.stack([rng.normal(size=(3, 50)), -rng.uniform(.2, 2., size=(3, 50))])
+        cases = [(GaussianStatistic(variance=1.7), theta[:1], lambda r: r.normal(1.7 * theta[0], np.sqrt(1.7))),
+                 (GaussianMeanVarianceStatistic(), theta,
+                  lambda r: r.normal(-0.5 / theta[1] * theta[0], np.sqrt(-0.5 / theta[1]))),
+                 (ExponentialStatistic(), theta[1:], lambda r: r.exponential(-1. / theta[1]))]
+        for statistic, parameters, general in cases:
+            with self.subTest(statistic=statistic):
+                np.testing.assert_array_equal(statistic.sample(parameters, np.random.default_rng(1)),
+                                              general(np.random.default_rng(1)))
+        gamma = np.random.default_rng(1).gamma(0.3 * theta + 1.)
+        np.testing.assert_array_equal(DirichletStatistic(2).sample(0.3 * theta, np.random.default_rng(1)),
+                                      np.moveaxis(gamma / np.sum(gamma, axis=0), 0, -1))
+
+    def test_multivariate_gaussian_samples_of_each_class_and_dimension_one(self):
+        rng = np.random.default_rng(2)
+        classes = rng.integers(0, 4, size=40)
+        for d in (1, 3):
+            with self.subTest(d=d):
+                statistic = MultivariateGaussianStatistic(d)
+                theta = statistic.random_natural(rng.normal(size=(statistic.dim, 2, 4)) * 0.5)
+                np.testing.assert_array_equal(statistic.sample_classes(theta, classes, np.random.default_rng(3)),
+                                              statistic.sample(theta[..., classes], np.random.default_rng(3)))
+        statistic, matrices = MultivariateGaussianStatistic(1), rng.uniform(.2, 3., size=(5, 1, 1))
+        np.testing.assert_array_equal(statistic._inverse(matrices), np.linalg.inv(matrices))
+        np.testing.assert_array_equal(statistic._cholesky(matrices), np.linalg.cholesky(matrices))
+
+    def test_trigamma_is_polygamma(self):
+        from scipy.special import polygamma
+        from src.model.statistic import trigamma
+        x = np.random.default_rng(4).uniform(1e-3, 50., size=1000)
+        np.testing.assert_array_equal(trigamma(x), polygamma(1, x))
+
+
 class CanonicalFeatureStatisticTests(unittest.TestCase):
     def test_mixed_features(self):
         T = CanonicalFeatureStatistic([3, GaussianMeanVarianceStatistic(), PoissonStatistic()])

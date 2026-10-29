@@ -79,12 +79,12 @@ class JointMLR:
     #     log_p = all_log_p[:, y, range(n)]
     #     return log_p
 
-    def log_loss(self, x, y, etas):
-        lcp = self.log_conditional_probabilities(x, etas)
+    def log_loss(self, x, y, etas, tx=None):
+        lcp = self.log_conditional_probabilities(x, etas, tx)
         return -np.mean(lcp[:, np.arange(len(y)), y], axis=1)
 
-    def accuracy(self, x, y, etas):
-        lcp = self.log_conditional_probabilities(x, etas)
+    def accuracy(self, x, y, etas, tx=None):
+        lcp = self.log_conditional_probabilities(x, etas, tx)
         return np.mean(np.argmax(lcp, axis=2) == y, axis=1)
 
     def class_probabilities(self, eta):
@@ -96,7 +96,7 @@ class JointMLR:
         if class_probabilities is None:
             class_probabilities = self.class_probabilities(self.eta)
         y = rng.choice(self.S.many_values, size=n, p=class_probabilities)
-        x = self.T.sample(self.beta[:, y], rng)
+        x = self.T.sample(self.beta, rng, y)
         return x, y
 
     def compute_all_x(self):

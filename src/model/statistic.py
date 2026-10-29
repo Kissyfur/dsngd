@@ -1,7 +1,7 @@
 import copy
 
 import numpy as np
-from scipy.special import digamma, gammaln, i0e, i1e, logsumexp, polygamma
+from scipy.special import digamma, gammaln, i0e, i1e, logsumexp, zeta
 
 
 class Statistic:
@@ -132,7 +132,8 @@ class GaussianStatistic(ExponentialFamilyStatistic):
         return z
 
     def sample(self, theta, rng):
-        return rng.normal(self.variance * theta[0], np.sqrt(self.variance))
+        # The draws of rng.normal(mean, standard deviation), which is slower with arrays of means
+        return self.variance * theta[0] + np.sqrt(self.variance) * rng.standard_normal(theta[0].shape)
 
 
 class GaussianMeanVarianceStatistic(ExponentialFamilyStatistic):
@@ -165,8 +166,9 @@ class GaussianMeanVarianceStatistic(ExponentialFamilyStatistic):
         return np.stack([mean / var, -0.5 / var])
 
     def sample(self, theta, rng):
+        # The draws of rng.normal(mean, standard deviation), which is slower with arrays of parameters
         var = -0.5 / theta[1]
-        return rng.normal(var * theta[0], np.sqrt(var))
+        return var * theta[0] + np.sqrt(var) * rng.standard_normal(var.shape)
 
 
 class MultivariateGaussianStatistic(ExponentialFamilyStatistic):
@@ -200,9 +202,16 @@ class MultivariateGaussianStatistic(ExponentialFamilyStatistic):
         return np.concatenate([np.moveaxis((precision @ mean[..., None])[..., 0], -1, 0),
                                np.moveaxis(quadratic[..., self._upper[0], self._upper[1]], -1, 0)])
 
+    def _inverse(self, matrices):
+        # For d = 1 the inverse is the reciprocal, as computed by LAPACK, without its cost for each matrix
+        return 1. / matrices if self.d == 1 else np.linalg.inv(matrices)
+
+    def _cholesky(self, matrices):
+        return np.sqrt(matrices) if self.d == 1 else np.linalg.cholesky(matrices)
+
     def _moments(self, theta):
         quadratic = self._symmetric(theta[self.d:])
-        covariance = np.linalg.inv(-(quadratic + quadratic * np.eye(self.d)))
+        covariance = self._inverse(-(quadratic + quadratic * np.eye(self.d)))
         mean = (covariance @ np.moveaxis(theta[:self.d], 0, -1)[..., None])[..., 0]
         return mean, covariance
 
@@ -220,7 +229,7 @@ class MultivariateGaussianStatistic(ExponentialFamilyStatistic):
         # Derivative of the natural parameter in the direction rho of the expectation parameter
         theta_star, rho = np.broadcast_arrays(theta_star, rho)
         mean = np.moveaxis(theta_star[:self.d], 0, -1)
-        precision = np.linalg.inv(self._symmetric(theta_star[self.d:]) - mean[..., :, None] * mean[..., None, :])
+        precision = self._inverse(self._symmetric(theta_star[self.d:]) - mean[..., :, None] * mean[..., None, :])
         rho_mean = np.moveaxis(rho[:self.d], 0, -1)
         d_covariance = (self._symmetric(rho[self.d:]) - rho_mean[..., :, None] * mean[..., None, :]
                         - mean[..., :, None] * rho_mean[..., None, :])
@@ -238,12 +247,20 @@ class MultivariateGaussianStatistic(ExponentialFamilyStatistic):
         lower = np.tril(self._symmetric(z[self.d:]))
         diagonal = np.arange(self.d)
         lower[..., diagonal, diagonal] = np.exp(lower[..., diagonal, diagonal])
-        return self._natural(mean, np.linalg.inv(lower @ np.swapaxes(lower, -1, -2)))
+        return self._natural(mean, self._inverse(lower @ np.swapaxes(lower, -1, -2)))
 
     def sample(self, theta, rng):
         mean, covariance = self._moments(theta)
         noise = rng.standard_normal(mean.shape)
-        return mean + (np.linalg.cholesky(covariance) @ noise[..., None])[..., 0]
+        return mean + (self._cholesky(covariance) @ noise[..., None])[..., 0]
+
+    def sample_classes(self, theta, classes, rng):
+        # One observation for each entry of classes, with the parameters of its class along the last axis of theta.
+        # The moments and their Cholesky factors are computed once for each class.
+        mean, covariance = self._moments(theta)
+        mean, factor = mean[..., classes, :], self._cholesky(covariance)[..., classes, :, :]
+        noise = rng.standard_normal(mean.shape)
+        return mean + (factor @ noise[..., None])[..., 0]
 
 
 class PoissonStatistic(ExponentialFamilyStatistic):
@@ -352,7 +369,8 @@ class ExponentialStatistic(ExponentialFamilyStatistic):
         return -np.exp(z)
 
     def sample(self, theta, rng):
-        return rng.exponential(-1. / theta[0])
+        # The draws of rng.exponential(mean), which is slower with arrays of means
+        return -1. / theta[0] * rng.standard_exponential(theta[0].shape)
 
 
 class GammaStatistic(ExponentialFamilyStatistic):
@@ -380,7 +398,7 @@ class GammaStatistic(ExponentialFamilyStatistic):
         c = np.log(theta_star[0]) - theta_star[1]
         shape = (3. - c + np.sqrt((c - 3.) ** 2 + 24. * c)) / (12. * c)
         for _ in range(self.newton_steps):
-            step = (np.log(shape) - digamma(shape) - c) / (1. / shape - polygamma(1, shape))
+            step = (np.log(shape) - digamma(shape) - c) / (1. / shape - trigamma(shape))
             shape = shape - step
             if np.max(np.abs(step / shape)) < 1e-12:
                 break
@@ -389,9 +407,10 @@ class GammaStatistic(ExponentialFamilyStatistic):
     def dual_hessian_product(self, theta_star, rho):
         # (hess F)^-1 rho with hess F = [[k / l^2, 1 / l], [1 / l, trigamma(k)]]
         shape, rate = self.shape_rate(theta_star)
-        trigamma = polygamma(1, shape)
-        determinant = (shape * trigamma - 1.) / rate ** 2
-        return np.stack([trigamma * rho[0] - rho[1] / rate, shape * rho[1] / rate ** 2 - rho[0] / rate]) / determinant
+        trigamma_shape = trigamma(shape)
+        determinant = (shape * trigamma_shape - 1.) / rate ** 2
+        return np.stack([trigamma_shape * rho[0] - rho[1] / rate,
+                         shape * rho[1] / rate ** 2 - rho[0] / rate]) / determinant
 
     def initial_natural(self):
         return np.array([-1., 0.])
@@ -403,13 +422,18 @@ class GammaStatistic(ExponentialFamilyStatistic):
         return rng.gamma(theta[1] + 1., -1. / theta[0])
 
 
+def trigamma(x):
+    # polygamma(1, x), which scipy computes as zeta(2, x) after also computing digamma(x) for the case n = 0
+    return zeta(2., x)
+
+
 def inverse_digamma(y, newton_steps=5):
     # Initialization of Minka (2000) followed by Newton's method. Both branches are evaluated, and the unused one
     # divides by zero at y = -0.5772...
     with np.errstate(divide='ignore'):
         x = np.where(y >= -2.22, np.exp(y) + 0.5, -1. / (y + 0.5772156649015329))
     for _ in range(newton_steps):
-        x = x - (digamma(x) - y) / polygamma(1, x)
+        x = x - (digamma(x) - y) / trigamma(x)
     return x
 
 
@@ -437,8 +461,8 @@ class DirichletStatistic(ExponentialFamilyStatistic):
 
     def hessian_solve(self, a, rho):
         # (hess F)^-1 rho with hess F = diag(trigamma(a)) - trigamma(sum(a)) 1 1^T, by Sherman-Morrison
-        d = polygamma(1, a)
-        c = polygamma(1, np.sum(a, axis=0))
+        d = trigamma(a)
+        c = trigamma(np.sum(a, axis=0))
         z = rho / d
         return z + c * np.sum(z, axis=0) / (1. - c * np.sum(1. / d, axis=0)) / d
 
@@ -471,7 +495,8 @@ class DirichletStatistic(ExponentialFamilyStatistic):
         return np.exp(z) - 1.
 
     def sample(self, theta, rng):
-        gamma = rng.gamma(theta + 1.)
+        # The draws of rng.gamma(theta + 1), whose unit scale makes them standard gamma draws
+        gamma = rng.standard_gamma(theta + 1.)
         return np.moveaxis(gamma / np.sum(gamma, axis=0), 0, -1)
 
 
@@ -593,12 +618,17 @@ class CanonicalFeatureStatistic(Statistic):
             beta[rows] = cs.random_natural(z[rows]) if cs.discrete else cs.random_natural(continuous_scale * z[rows])
         return beta
 
-    def sample(self, beta, rng):
-        # One observation for each column of beta
-        x = np.empty((beta.shape[1], self.input_columns))
+    def sample(self, beta, rng, classes=None):
+        # One observation for each column of beta or, given classes, for each class, a column of beta. Statistics with
+        # sample_classes compute what they need once for each class.
+        observations = beta if classes is None else beta[:, classes]
+        x = np.empty((observations.shape[1], self.input_columns))
         for group in self.groups:
-            values = group.statistic.sample(group.stack(beta[group.rows]), rng)
-            x[:, group.columns] = np.moveaxis(values, 0, 1).reshape(beta.shape[1], -1)
+            if classes is not None and hasattr(group.statistic, 'sample_classes'):
+                values = group.statistic.sample_classes(group.stack(beta[group.rows]), classes, rng)
+            else:
+                values = group.statistic.sample(group.stack(observations[group.rows]), rng)
+            x[:, group.columns] = np.moveaxis(values, 0, 1).reshape(len(x), -1)
         return x
 
 

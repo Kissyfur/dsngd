@@ -64,9 +64,10 @@ def load(dataset, features, levels):
     return statistics, x_train, y_train, x_test, y_test
 
 
-def evaluate(model, x, y, etas, chunk=10):
-    log_loss = np.concatenate([model.log_loss(x, y, etas[i:i + chunk]) for i in range(0, len(etas), chunk)])
-    accuracy = np.concatenate([model.accuracy(x, y, etas[i:i + chunk]) for i in range(0, len(etas), chunk)])
+def evaluate(model, tx, y, etas, chunk=10):
+    # tx is the statistic of the observations
+    log_loss = np.concatenate([model.log_loss(None, y, etas[i:i + chunk], tx) for i in range(0, len(etas), chunk)])
+    accuracy = np.concatenate([model.accuracy(None, y, etas[i:i + chunk], tx) for i in range(0, len(etas), chunk)])
     return log_loss, accuracy
 
 
@@ -150,6 +151,8 @@ if __name__ == '__main__':
     if args.max_train:
         x_fit, y_fit = x_fit[:args.max_train], y_fit[:args.max_train]
     dimension = JointMLR(s, features).alpha.size + JointMLR(s, features).beta.size
+    # Statistics of the validation and test observations, which are the same for all the models
+    tx_val, tx_test = JointMLR(s, features).T.transform(x_val), JointMLR(s, features).T.transform(x_test)
     title = f'{args.dataset} ({args.features}): {len(y_fit)} train, {len(y_val)} validation, {len(y_test)} test, ' \
             f'{len(features)} features, {s} classes, {dimension} parameters'
     progress = Progress([((name,), 1) for _ in range(args.seeds) for name in args.algorithms])
@@ -163,10 +166,11 @@ if __name__ == '__main__':
         for name in args.algorithms:
             model = JointMLR(s, features)
             algo = ALGORITHMS[name](model)
-            lr = model.find_best_lr(None, sample_lr, algo, metric=lambda etas: model.log_loss(x_val, y_val, etas),
+            lr = model.find_best_lr(None, sample_lr, algo,
+                                    metric=lambda etas: model.log_loss(None, y_val, etas, tx_val),
                                     min_exponent=args.min_lr_exponent, verbose=not args.quiet)
             model.fit(sample, algo, lr=lr, verbose=not args.quiet)
-            log_loss, accuracy = evaluate(model, x_test, y_test, model.history['etas'])
+            log_loss, accuracy = evaluate(model, tx_test, y_test, model.history['etas'])
             results[name]['log_loss'].append(log_loss)
             results[name]['accuracy'].append(accuracy)
             results[name]['lr'].append(lr)
