@@ -84,7 +84,8 @@ PYTHONPATH=. python bin/experiment.py --features gaussian --output outputs/gauss
 `multivariate-gaussian`, `dirichlet` or `mixed` (each 5-valued feature replaced by Gaussian, Poisson and exponential
 features). The figure and the curves are saved in the given
 path. The real data experiments use Covertype and MNIST, downloaded to `saved_data/`, with `--features` choosing the model
-of the features. For Covertype, `natural` gives each variable a family according to its nature (Gaussian for elevation
+of the features, and the learning rate search starts at initial rates of 10^-7 (`--min-lr-exponent`) instead of the
+10^-4 of the synthetic experiments, since the best rates of DSNGD are smaller on these data. For Covertype, `natural` gives each variable a family according to its nature (Gaussian for elevation
 and vertical distance, von Mises for the aspect, Gamma for the slope and the distances, Beta for the hillshade indices
 and categorical for wilderness area and soil type) and `gaussian` uses Gaussians for all the continuous variables. For
 MNIST, `levels` models each pixel as a categorical variable with 13 intensity levels (59,169 parameters, as LeNet-5,

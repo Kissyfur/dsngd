@@ -77,6 +77,8 @@ def parse_args():
     parser.add_argument('--levels', type=int, default=13, help='Intensity levels of the pixels with --features levels')
     parser.add_argument('--epochs', type=int, help='Epochs over the training set')
     parser.add_argument('--n-lr', type=int, help='Training observations used in the learning rate search')
+    parser.add_argument('--min-lr-exponent', type=int, default=-7,
+                        help='Smallest initial learning rate of the search, as a power of 10 (-4 on synthetic data)')
     parser.add_argument('--max-train', type=int, help='Use only this many training observations')
     parser.add_argument('--seeds', type=int, default=5, help='Repetitions with different orders of the data')
     parser.add_argument('--algorithms', nargs='+', choices=list(ALGORITHMS), default=['SGD', 'AdaGrad', 'DSNGD'])
@@ -158,7 +160,8 @@ if __name__ == '__main__':
         for name in args.algorithms:
             model = JointMLR(s, features)
             algo = ALGORITHMS[name](model)
-            lr = model.find_best_lr(None, sample_lr, algo, metric=lambda etas: model.log_loss(x_val, y_val, etas))
+            lr = model.find_best_lr(None, sample_lr, algo, metric=lambda etas: model.log_loss(x_val, y_val, etas),
+                                    min_exponent=args.min_lr_exponent)
             model.fit(sample, algo, lr=lr, verbose=not args.quiet)
             log_loss, accuracy = evaluate(model, x_test, y_test, model.history['etas'])
             results[name]['log_loss'].append(log_loss)

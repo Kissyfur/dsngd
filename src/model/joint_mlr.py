@@ -127,16 +127,18 @@ class JointMLR:
         beta_dual = self.T.expectation(eta[1]) * alpha_dual
         return alpha_dual, beta_dual
 
-    def find_best_lr(self, true_model, sample, optimizer: LineSearch, metric=None):
+    def find_best_lr(self, true_model, sample, optimizer: LineSearch, metric=None, min_exponent=-4):
         # metric(etas) gives the error of each eta, by default the KL divergence to true_model
         if metric is None:
             metric = lambda etas: self.compute_metrics(true_model, etas)
         exp = np.power(10., np.arange(-4, 2))
-        lrs = list(itertools.product(exp, exp))
+        # Initial rates a (or the single rate) from 10^min_exponent, decays b in exp
+        rates = np.power(10., np.arange(min_exponent, 2))
+        lrs = list(itertools.product(rates, exp))
         best_lr = np.array([1., 1.])
 
         if optimizer.single_learning_rate_parameter:
-            lrs = list(itertools.product(exp))
+            lrs = list(itertools.product(rates))
             best_lr = 1.
 
         etas = optimizer.run(sample, starting_point=(self.alpha.copy(), self.beta.copy()), lr=best_lr, iter_keep=100)
