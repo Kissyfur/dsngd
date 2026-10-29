@@ -21,7 +21,8 @@ run() {
 }
 
 if [ "$PART" != real ]; then
-    for features in discrete gaussian gaussian-mv poisson exponential gamma beta multivariate-gaussian dirichlet mixed; do
+    # The slowest experiments first, so that the parallel jobs end at about the same time
+    for features in dirichlet beta gamma multivariate-gaussian mixed gaussian-mv discrete gaussian poisson exponential; do
         run outputs/synthetic/$features.log $PYTHON bin/experiment.py --features $features --experiments $EXPERIMENTS \
             --quiet --output outputs/synthetic/$features
     done
