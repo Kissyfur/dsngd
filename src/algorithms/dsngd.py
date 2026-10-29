@@ -19,20 +19,24 @@ class DSNGD_JointMLR(LineSearch):
         self.model = model
         # self.lr_training_function = self.lr_cost_function
 
-    def aprox_natural_gradient_log_conditional_probability(self, sample, eta, dual_parameter):
+    def aprox_natural_gradient_log_conditional_probability(self, sample, eta, dual_parameter, tx=None):
+        # Theorem 3.2: the statistics weighted by the rescaled residuals w, T(x)^T w, in one product for all the
+        # features, and H(theta*) applied to the features of each family together. tx is the statistic of x, if known.
         x, y = sample
         alpha_dual, beta_dual = dual_parameter
+        tx = self.model.T.transform(x) if tx is None else tx
         py_inv = np.sum(alpha_dual) / alpha_dual
 
-        q_minus_e = self.model.conditional_probabilities(x, [eta])[0] - self.model.S.identity(y)
-
-        ng_alpha = np.sum(q_minus_e, axis=0) * py_inv * (1-self.model.T.r)
-        ng_beta = None
-        for (feature_statistic_i, _, dual_rows), xi in zip(self.model.T.slices(), self.model.T.columns(x)):
-            # beta block of the feature and its term u * q * (1 - <theta*_i, g_i>) of the alpha block
-            block, alpha_i = feature_statistic_i.dsngd_terms(xi, beta_dual[dual_rows], alpha_dual, q_minus_e)
-            ng_beta = block if ng_beta is None else np.vstack([ng_beta, block])
-            ng_alpha += alpha_i
+        w = (self.model.conditional_probabilities(x, [eta], tx)[0] - self.model.S.identity(y)) * py_inv
+        a = np.sum(w, axis=0)
+        m = np.dot(tx.T, w)
+        ng_alpha = a.copy()
+        ng_beta = np.empty_like(m)
+        for group in self.model.T.groups:
+            theta_star = group.stack(beta_dual[group.expectation_rows] / alpha_dual)
+            block = group.statistic.dual_hessian_product(theta_star, group.stack(m[group.rows]) - theta_star * a)
+            ng_beta[group.rows] = group.unstack(block)
+            ng_alpha -= np.sum(theta_star * block, axis=(0, 1))
 
         ng_alpha = ng_alpha[:-1] - ng_alpha[-1]
         return ng_alpha, ng_beta
@@ -48,12 +52,14 @@ class DSNGD_JointMLR(LineSearch):
         for it, obs in s:
             if it % length == 0:
                 etas.append([alpha.copy(), beta.copy()])
-            ng_alpha, ng_beta = self.director_process(obs, (alpha, beta), (alpha_dual, beta_dual))
+            # The statistic of the batch serves the direction and the update of the dual parameter
+            id_x = self.model.T.identity(obs[0])
+            ng_alpha, ng_beta = self.director_process(obs, (alpha, beta), (alpha_dual, beta_dual),
+                                                      id_x[:, self.model.T.expectation_rows])
             r = self.lr_update(it, lr)
             alpha -= r * ng_alpha
             beta -= r * ng_beta
             id_y = self.model.S.identity(obs[1])
-            id_x = self.model.T.identity(obs[0])
             cyx = np.dot(id_x.T, id_y)
             alpha_dual += np.sum(id_y, axis=0)
             beta_dual += cyx

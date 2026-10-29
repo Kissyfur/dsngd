@@ -23,6 +23,9 @@ MODELS = {
     'mixed': [3, GaussianMeanVarianceStatistic(), PoissonStatistic(), ExponentialStatistic(), GaussianStatistic(),
               MultivariateGaussianStatistic(2), GammaStatistic(), BetaStatistic(), DirichletStatistic(3),
               VonMisesStatistic()],
+    # Families repeated in non contiguous features, which are computed together
+    'repeated': [3, GaussianMeanVarianceStatistic(), GammaStatistic(), 3, GaussianMeanVarianceStatistic(),
+                 MultivariateGaussianStatistic(2), GammaStatistic(), MultivariateGaussianStatistic(2), 2],
 }
 
 

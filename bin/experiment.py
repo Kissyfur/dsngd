@@ -14,6 +14,7 @@ from src.algorithms.dsngd import DSNGD_JointMLR
 from src.grapher import plot_lines
 from src.algorithms.sngd import SNGD_JointMLR
 from src.algorithms.adaGrad import AdaGrad_JointMLR
+from src.progress import Progress
 
 
 logging.basicConfig(level=logging.INFO)
@@ -89,32 +90,40 @@ if __name__ == "__main__":
     lrs = {}
     times = {}
     problems = {}
+    entropy_names = ['high', 'medium', 'low']
+    dimensions = [JointMLR(s, m).alpha.size + JointMLR(s, m).beta.size for s, m in manifolds]
+    # The cost of training is taken proportional to the dimension of the manifold
+    progress = Progress([((label, i), dimensions[i]) for i in range(len(manifolds)) for _ in entropies
+                         for _ in range(many_experiments) for label in labels])
+    logging.info(f"{args.features}: manifolds of dimension {dimensions}, {len(entropies)} entropies, "
+                 f"{many_experiments} experiments and {len(labels)} algorithms, {len(progress.tasks)} trainings on "
+                 f"{n} observations")
     for i, (s, m) in enumerate(manifolds):
         for j, sigma_sq in enumerate(entropies):
             d = {algo_class.CLASS_NAME: [] for algo_class in algorithm_classes}
             for exp_num in range(many_experiments):
-                logging.info(f"Running experiment")
-                logging.info(f"Features: {args.features}, Manifold: M{i + 1} {(s, m)},     Entropy: {sigma_sq},      "
-                             f"Experiment num: {exp_num}")
                 problem = JointMLR(s, m)
                 np.random.seed(exp_num)
                 problem.set_random_eta(sigma_sq)
                 problem.set_pyx(args.support_size)
                 problems[(i, j, exp_num)] = problem
                 sample = JointMLRSampleIterator(problem, n, epochs, batch, random_seed=exp_num)
-                sample_lr = JointMLRSampleIterator(problem, n_lr, 1, batch, random_seed=exp_num+1)
+                # Drawn once and shared by the learning rate candidates of all the algorithms
+                sample_lr = list(JointMLRSampleIterator(problem, n_lr, 1, batch, random_seed=exp_num+1))
                 for algo_class in algorithm_classes:
-                    logging.info(f"Algorithm: {algo_class.CLASS_NAME}")
                     model = JointMLR(s, m)
                     algo = algo_class(model)
-                    lr = model.find_best_lr(problem, sample_lr, algo)
+                    lr = model.find_best_lr(problem, sample_lr, algo, verbose=not args.quiet)
                     model.fit(sample, algo, verbose=not args.quiet, lr=lr)
                     model.compute_history_metrics(problem)
                     d[algo.CLASS_NAME].append(model.history['error'])
                     lrs[(i, j, exp_num, algo.CLASS_NAME)] = lr
                     times[(i, j, exp_num, algo.CLASS_NAME)] = model.history['time']
-                    logging.info(f"{algo.CLASS_NAME} final error: {model.history['error'][-1]:.4e}, training time: "
-                                 f"{model.history['time']:.2f} s ({1e6 * model.history['time'] / (n * epochs):.2f} us/sample)")
+                    logging.info(f"M{i + 1}, {entropy_names[j]} entropy, experiment {exp_num + 1}/{many_experiments}, "
+                                 f"{algo.CLASS_NAME}: final error {model.history['error'][-1]:.4e}, learning rate "
+                                 f"{'/'.join(f'{v:g}' for v in np.atleast_1d(lr))}, training "
+                                 f"{model.history['time']:.1f} s ({1e6 * model.history['time'] / (n * epochs):.2f} "
+                                 f"us/sample); {progress.step()}")
             curves[(i, j)] = d
             if args.output:
                 save_curves(args.output, curves, lrs, times, labels, n)
@@ -131,4 +140,4 @@ if __name__ == "__main__":
     plot_lines(x, gr, labels, y_labels=['M1', 'M2', 'M3'], x_labels=['High entropy', 'Medium entropy', 'Low entropy'],
                low_lines=up, high_lines=dn, file_name=args.output or '')
 
-    print("finished")
+    logging.info(f"finished in {progress.elapsed()}")

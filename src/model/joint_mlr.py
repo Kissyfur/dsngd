@@ -26,6 +26,8 @@ class JointMLR:
         # self.trainer = Trainer()
         self.pyx = None
         self.x_support = None
+        self.support_statistic = None
+        self.support_cross_entropy = None
 
     def set_random_eta(self, sigma):
         alpha = np.random.normal(0., sigma, size=self.S.dim)
@@ -53,21 +55,21 @@ class JointMLR:
             return False
         return True
 
-    def log_measures(self, x, etas):
-        tx = self.T.transform(x)
+    def log_measures(self, x, etas, tx=None):
+        # tx is the statistic of x, when it is already computed
+        tx = self.T.transform(x) if tx is None else tx
         alphas, betas = np.array([eta[0] for eta in etas]), np.array([eta[1] for eta in etas])
 
         alpha_s = np.hstack([alphas, np.zeros((len(alphas), 1))])
-        log_measures = np.dot(tx, betas) + alpha_s
-        return log_measures.transpose((1, 0, 2))
+        return np.matmul(tx, betas) + alpha_s[:, None, :]
 
-    def log_conditional_probabilities(self, x, etas):
-        lm = self.log_measures(x, etas)
+    def log_conditional_probabilities(self, x, etas, tx=None):
+        lm = self.log_measures(x, etas, tx)
         ld = logsumexp(lm, axis=2)
         return (lm.T - ld.T).T
 
-    def conditional_probabilities(self, x, etas):
-        lcp = self.log_conditional_probabilities(x, etas)
+    def conditional_probabilities(self, x, etas, tx=None):
+        lcp = self.log_conditional_probabilities(x, etas, tx)
         return np.exp(lcp)
 
     # def log_p(self, x, y):
@@ -90,8 +92,10 @@ class JointMLR:
         log_py = np.hstack([alpha, 0.]) + self.T.log_partition(beta)
         return np.exp(log_py - logsumexp(log_py))
 
-    def sample(self, n, rng):
-        y = rng.choice(self.S.many_values, size=n, p=self.class_probabilities(self.eta))
+    def sample(self, n, rng, class_probabilities=None):
+        if class_probabilities is None:
+            class_probabilities = self.class_probabilities(self.eta)
+        y = rng.choice(self.S.many_values, size=n, p=class_probabilities)
         x = self.T.sample(self.beta[:, y], rng)
         return x, y
 
@@ -127,7 +131,7 @@ class JointMLR:
         beta_dual = self.T.expectation(eta[1]) * alpha_dual
         return alpha_dual, beta_dual
 
-    def find_best_lr(self, true_model, sample, optimizer: LineSearch, metric=None, min_exponent=-4):
+    def find_best_lr(self, true_model, sample, optimizer: LineSearch, metric=None, min_exponent=-4, verbose=True):
         # metric(etas) gives the error of each eta, by default the KL divergence to true_model
         if metric is None:
             metric = lambda etas: self.compute_metrics(true_model, etas)
@@ -144,7 +148,7 @@ class JointMLR:
         etas = optimizer.run(sample, starting_point=(self.alpha.copy(), self.beta.copy()), lr=best_lr, iter_keep=100)
         best_err = np.sum(metric(etas[-5:]))
 
-        for lr in tqdm(lrs, desc="Learning rate search..."):
+        for lr in tqdm(lrs, desc="Learning rate search...", disable=not verbose):
             try:
                 etas = optimizer.run(sample, starting_point=(self.alpha.copy(), self.beta.copy()), lr=lr, iter_keep=100)
                 err = np.sum(metric(etas[-5:]))
@@ -155,7 +159,7 @@ class JointMLR:
                     best_err = err
             except (OverflowError, np.linalg.LinAlgError, FloatingPointError):
                 pass
-        logging.info(f"Best learning rate: {best_lr} with error: {best_err} ")
+        logging.debug(f"Best learning rate: {best_lr} with error: {best_err} ")
         return best_lr
 
     def fit(self, sample, optimizer: LineSearch, lr, verbose=False, iter_keep=100):
@@ -170,16 +174,22 @@ class JointMLR:
         self.history = history
 
     def compute_metrics(self, true_model, estimations, chunk=10):
-        true_model.set_pyx()
-        true_pyx = true_model.pyx
-        all_x = np.array(list(true_model.compute_all_x()))
-        log_true_model = self.log_conditional_probabilities(all_x, [true_model.eta])
+        tx, true_cross_entropy = true_model.metric_support()
         kl = []
         for start in range(0, len(estimations), chunk):
-            log_pred = self.log_conditional_probabilities(all_x, estimations[start:start + chunk])
-            kl.append(self.relative_entropy(true_pyx, log_pred) - self.relative_entropy(true_pyx, log_true_model))
+            log_pred = self.log_conditional_probabilities(None, estimations[start:start + chunk], tx)
+            kl.append(self.relative_entropy(true_model.pyx, log_pred) - true_cross_entropy)
         # kl = self.relative_entropy(true_pyx, log_pred)
         return np.concatenate(kl)
+
+    def metric_support(self):
+        # Statistic of the points x of the metric and cross entropy of the model with itself, computed once like pyx
+        if self.support_statistic is None:
+            self.set_pyx()
+            self.support_statistic = self.T.transform(np.array(list(self.compute_all_x())))
+            log_pyx = self.log_conditional_probabilities(None, [self.eta], self.support_statistic)
+            self.support_cross_entropy = self.relative_entropy(self.pyx, log_pyx)
+        return self.support_statistic, self.support_cross_entropy
 
     def compute_history_metrics(self, true_model):
         etas = self.history['etas']

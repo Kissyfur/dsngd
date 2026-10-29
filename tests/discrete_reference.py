@@ -20,8 +20,11 @@ from src.model.joint_mlr import JointMLR
 
 GOLDEN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'discrete_golden.npz')
 
-# Outputs that depend on to_dual or on the KL metric are compared with a tolerance; the rest exactly.
-APPROXIMATE_KEYS = ('to_dual_alpha', 'to_dual_beta', 'sngd_alpha', 'sngd_beta', 'fit_SNGD_alpha', 'fit_SNGD_beta')
+# Outputs whose floating point sums are done in another order than in the original implementation (to_dual, the KL
+# metric, the directions computed for all the features at once and the fits) are compared with a tolerance; the rest,
+# including the samples, the prior and the selected learning rates, exactly.
+APPROXIMATE_KEYS = ('to_dual_alpha', 'to_dual_beta', 'sngd_alpha', 'sngd_beta', 'dsngd_alpha', 'dsngd_beta') + tuple(
+    f'fit_{name}_{block}' for name in ('SGD', 'AdaGrad', 'DSNGD', 'SNGD') for block in ('alpha', 'beta'))
 APPROXIMATE_SUFFIX = '_error'
 
 

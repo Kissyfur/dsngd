@@ -64,9 +64,12 @@ model = JointMLR(10, [10, GaussianMeanVarianceStatistic(), PoissonStatistic()])
 
 DSNGD only needs from each family the product of a vector by the Hessian of the conjugate of its log-partition at the
 expectation parameter (`dual_hessian_product`), which gives the score in expectation coordinates and lets DSNGD compute
-the direction of a mini-batch from the same sums of statistics as SGD. For the Gamma, Beta and Dirichlet families
-the natural parameters are recovered from the expectation parameters with a few Newton steps. Categorical features
-keep the original closed-form DSNGD terms, so the discrete case gives the same results as before. With continuous
+the direction of a mini-batch from the same sums of statistics as SGD. For the Gamma, Beta, Dirichlet and von Mises
+families the natural parameters are recovered from the expectation parameters with a few Newton steps. The features of
+each family are computed together: the sums of statistics of all the features come from one matrix product, and each
+family applies its Hessian to all its features at once, so its methods take parameters with the components along the
+first axis and any number of further axes. Categorical features use the same formula, which reproduces the discrete
+results of the original implementation up to floating point rounding. With continuous
 features the error is the KL divergence between the true and the estimated conditional distributions, computed on a
 Monte Carlo sample of x (exact over y).
 
@@ -96,12 +99,15 @@ PYTHONPATH=. python bin/experiment_real.py --dataset covertype --features natura
 PYTHONPATH=. python bin/experiment_real.py --dataset mnist --features levels --output outputs/real/mnist_levels
 ```
 
-`bin/run_experiments.sh` runs all the experiments of the paper, `JOBS` at a time (6 by default), and
+`bin/run_experiments.sh` runs all the experiments of the paper, `JOBS` at a time (6 by default), with `EXPERIMENTS`
+repetitions of each synthetic problem (1 by default); a second argument `synthetic` or `real` runs only one part. Each
+experiment writes one log line per training, with its result, the elapsed time and the expected remaining time.
 `bin/summarize.py` prints the final errors, LaTeX rows for the tables of real data and computational time, and copies
 the figures to `manuscript/figures`:
 
 ```bash
-JOBS=6 bin/run_experiments.sh python
+JOBS=6 EXPERIMENTS=1 bin/run_experiments.sh python synthetic
+tail -n 1 outputs/synthetic/*.log
 python bin/summarize.py
 ```
 

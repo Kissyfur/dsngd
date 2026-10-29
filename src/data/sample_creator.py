@@ -18,6 +18,7 @@ class JointMLRSampleIterator:
         if not self.model.T.discrete:
             # Continuous features: fresh draws from the model
             self.rng = np.random.default_rng(self.random_seed)
+            self.class_probabilities = self.model.class_probabilities(self.model.eta)
             self.current_epoch = 0
             self.current_epoch_length = 0
             return self
@@ -44,7 +45,7 @@ class JointMLRSampleIterator:
         if not self.model.T.discrete:
             n = min(self.batch, self.epoch_length - self.current_epoch_length)
             self.current_epoch_length += self.batch
-            return self.model.sample(n, self.rng)
+            return self.model.sample(n, self.rng, self.class_probabilities)
         batch_indices = self.indices[self.current_epoch_length: self.current_epoch_length + self.batch]
         x_indices = batch_indices // self.model.S.many_values
         x = self.x[x_indices]

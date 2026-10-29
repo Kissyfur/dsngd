@@ -69,18 +69,18 @@ class CanonicalStatistic(Statistic):
 
     def sample(self, theta, rng):
         cumulative = np.cumsum(self.expectation(theta), axis=0)
-        values = np.sum(cumulative < rng.random(theta.shape[1]), axis=0)
+        values = np.sum(cumulative < rng.random(theta.shape[1:]), axis=0)
         return np.minimum(values, self.dim)
 
-    def dsngd_terms(self, x, dual, alpha_dual, q_minus_e):
-        x = x.astype(int)
-        D = np.sum(alpha_dual) / dual
-        D_q = D[x] * q_minus_e
-        block = np.dot(self.tau(x).T, D_q)
-        return block, np.sum(D_q[x == self.dim], axis=0)
+    def dual_hessian_product(self, theta_star, rho):
+        # theta* = (p_1, ..., p_{m-1}) and H(theta*) rho = rho_i / p_i + sum(rho) / p_m
+        return rho / theta_star + np.sum(rho, axis=0) / (1. - np.sum(theta_star, axis=0))
 
     def max_entropy_dual(self, psi, many_classes):
         return psi / (self.many_values * many_classes)
+
+    def __repr__(self):
+        return f'{type(self).__name__}({self.many_values})'
 
 
 class ExponentialFamilyStatistic(Statistic):
@@ -99,15 +99,6 @@ class ExponentialFamilyStatistic(Statistic):
         # g for every observation (axis 1) and every column of theta_star (axis 2)
         residual = self.transform(x).T[:, :, None] - theta_star[:, None, :]
         return self.dual_hessian_product(theta_star[:, None, :], residual)
-
-    def dsngd_terms(self, x, dual, alpha_dual, q_minus_e):
-        u_q = q_minus_e * (np.sum(alpha_dual) / alpha_dual)
-        theta_star = dual / alpha_dual
-        a = np.sum(u_q, axis=0)
-        # g is affine in T(x), so the sum over the observations only needs T(x)^T u q
-        block = self.dual_hessian_product(theta_star, np.dot(self.transform(x).T, u_q) - theta_star * a)
-        # Sum over the observations of u * q * (1 - <theta*, g>), as theta* does not depend on them
-        return block, a - np.sum(theta_star * block, axis=0)
 
     def max_entropy_dual(self, psi, many_classes):
         return psi / many_classes * self.expectation(self.initial_natural())[:, None]
@@ -413,8 +404,10 @@ class GammaStatistic(ExponentialFamilyStatistic):
 
 
 def inverse_digamma(y, newton_steps=5):
-    # Initialization of Minka (2000) followed by Newton's method
-    x = np.where(y >= -2.22, np.exp(y) + 0.5, -1. / (y + 0.5772156649015329))
+    # Initialization of Minka (2000) followed by Newton's method. Both branches are evaluated, and the unused one
+    # divides by zero at y = -0.5772...
+    with np.errstate(divide='ignore'):
+        x = np.where(y >= -2.22, np.exp(y) + 0.5, -1. / (y + 0.5772156649015329))
     for _ in range(newton_steps):
         x = x - (digamma(x) - y) / polygamma(1, x)
     return x
@@ -479,7 +472,7 @@ class DirichletStatistic(ExponentialFamilyStatistic):
 
     def sample(self, theta, rng):
         gamma = rng.gamma(theta + 1.)
-        return (gamma / np.sum(gamma, axis=0)).T
+        return np.moveaxis(gamma / np.sum(gamma, axis=0), 0, -1)
 
 
 class BetaStatistic(DirichletStatistic):
@@ -494,7 +487,40 @@ class BetaStatistic(DirichletStatistic):
         return np.column_stack([np.log(rv), np.log1p(-rv)])
 
     def sample(self, theta, rng):
-        return super().sample(theta, rng)[:, 0]
+        return super().sample(theta, rng)[..., 0]
+
+
+class FeatureGroup:
+    """Features with the same family and parameters, which are computed together.
+
+    Feature after feature, it holds their columns of the data, their rows of beta and of the dual parameter, and the
+    rows of the dual parameter that hold their expectation parameters (all but the last value of a categorical feature).
+    """
+
+    def __init__(self, statistic):
+        self.statistic = statistic
+        self.size = 0
+        self.columns, self.rows, self.dual_rows, self.expectation_rows = [], [], [], []
+
+    def add(self, column, row, dual_row):
+        cs = self.statistic
+        self.size += 1
+        self.columns = np.append(self.columns, np.arange(column, column + cs.input_dim)).astype(int)
+        self.rows = np.append(self.rows, np.arange(row, row + cs.dim)).astype(int)
+        self.dual_rows = np.append(self.dual_rows, np.arange(dual_row, dual_row + cs.dual_dim)).astype(int)
+        self.expectation_rows = np.append(self.expectation_rows, np.arange(dual_row, dual_row + cs.dim)).astype(int)
+
+    def values(self, rvs):
+        # One row for each observation and feature
+        values = rvs[:, self.columns].reshape(len(rvs) * self.size, self.statistic.input_dim)
+        return values[:, 0] if self.statistic.input_dim == 1 else values
+
+    def stack(self, parameters):
+        # From the rows of the group to (component, feature, ...), the layout of the parameters of a statistic
+        return np.swapaxes(parameters.reshape((self.size, self.statistic.dim) + parameters.shape[1:]), 0, 1)
+
+    def unstack(self, parameters):
+        return np.swapaxes(parameters, 0, 1).reshape((self.size * self.statistic.dim,) + parameters.shape[2:])
 
 
 class CanonicalFeatureStatistic(Statistic):
@@ -517,19 +543,28 @@ class CanonicalFeatureStatistic(Statistic):
         self.continuous_dim = np.sum([cs.dim for cs in self.canonical_statistics if not cs.discrete])
         super().__init__(dim)
         self.dual_dim = np.sum([cs.dual_dim for cs in self.canonical_statistics])
-
-    def columns(self, rvs):
-        # Values of each feature: a column of the data, or several for multivariate features
-        start = 0
-        for cs in self.canonical_statistics:
-            yield rvs[:, start] if cs.input_dim == 1 else rvs[:, start:start + cs.input_dim]
-            start += cs.input_dim
+        self.input_columns = sum(cs.input_dim for cs in self.canonical_statistics)
+        # Features of the same family and parameters are computed together
+        groups, column = {}, 0
+        for cs, rows, dual_rows in self.slices():
+            groups.setdefault(repr(cs), FeatureGroup(cs)).add(column, rows.start, dual_rows.start)
+            column += cs.input_dim
+        self.groups = list(groups.values())
+        # Columns of identity that form the statistic
+        self.expectation_rows = np.concatenate([dual_rows.start + np.arange(cs.dim)
+                                                for cs, _, dual_rows in self.slices()])
 
     def transform(self, rvs):
-        return np.hstack([cs.transform(rv) for cs, rv in zip(self.canonical_statistics, self.columns(rvs))])
+        tx = np.empty((len(rvs), self.dim))
+        for group in self.groups:
+            tx[:, group.rows] = group.statistic.transform(group.values(rvs)).reshape(len(rvs), -1)
+        return tx
 
     def identity(self, rvs):
-        return np.hstack([cs.identity(rv) for cs, rv in zip(self.canonical_statistics, self.columns(rvs))])
+        ix = np.empty((len(rvs), self.dual_dim))
+        for group in self.groups:
+            ix[:, group.dual_rows] = group.statistic.identity(group.values(rvs)).reshape(len(rvs), -1)
+        return ix
 
     def slices(self):
         # Rows of each feature in the natural (beta) and in the dual parameters
@@ -560,7 +595,11 @@ class CanonicalFeatureStatistic(Statistic):
 
     def sample(self, beta, rng):
         # One observation for each column of beta
-        return np.column_stack([cs.sample(beta[rows], rng) for cs, rows, _ in self.slices()])
+        x = np.empty((beta.shape[1], self.input_columns))
+        for group in self.groups:
+            values = group.statistic.sample(group.stack(beta[group.rows]), rng)
+            x[:, group.columns] = np.moveaxis(values, 0, 1).reshape(beta.shape[1], -1)
+        return x
 
 
 

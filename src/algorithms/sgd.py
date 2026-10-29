@@ -15,7 +15,7 @@ class SGD_JointMLR(LineSearch):
     def gradient_log_conditional_probability(self, sample, eta):
         x, y = sample
         tx = self.model.T.transform(x)
-        q_minus_e = self.model.conditional_probabilities(x, [eta])[0] - self.model.S.identity(y)
+        q_minus_e = self.model.conditional_probabilities(x, [eta], tx)[0] - self.model.S.identity(y)
         grad_alpha = np.sum(q_minus_e[:, :-1], axis=0)
         grad_beta = np.dot(tx.T, q_minus_e)
         return grad_alpha, grad_beta

@@ -16,6 +16,7 @@ from src.algorithms.dsngd import DSNGD_JointMLR
 from src.algorithms.sngd import SNGD_JointMLR
 from src.algorithms.adaGrad import AdaGrad_JointMLR
 from src.grapher import color, linestyles
+from src.progress import Progress
 
 
 logging.basicConfig(level=logging.INFO)
@@ -151,7 +152,9 @@ if __name__ == '__main__':
     dimension = JointMLR(s, features).alpha.size + JointMLR(s, features).beta.size
     title = f'{args.dataset} ({args.features}): {len(y_fit)} train, {len(y_val)} validation, {len(y_test)} test, ' \
             f'{len(features)} features, {s} classes, {dimension} parameters'
-    logging.info(title)
+    progress = Progress([((name,), 1) for _ in range(args.seeds) for name in args.algorithms])
+    logging.info(f'{title}; {args.seeds} orders of the data and {len(args.algorithms)} algorithms, '
+                 f'{len(progress.tasks)} trainings of {epochs} epochs')
 
     results = {name: {'log_loss': [], 'accuracy': [], 'lr': [], 'time': []} for name in args.algorithms}
     for seed in range(args.seeds):
@@ -161,7 +164,7 @@ if __name__ == '__main__':
             model = JointMLR(s, features)
             algo = ALGORITHMS[name](model)
             lr = model.find_best_lr(None, sample_lr, algo, metric=lambda etas: model.log_loss(x_val, y_val, etas),
-                                    min_exponent=args.min_lr_exponent)
+                                    min_exponent=args.min_lr_exponent, verbose=not args.quiet)
             model.fit(sample, algo, lr=lr, verbose=not args.quiet)
             log_loss, accuracy = evaluate(model, x_test, y_test, model.history['etas'])
             results[name]['log_loss'].append(log_loss)
@@ -169,12 +172,14 @@ if __name__ == '__main__':
             results[name]['lr'].append(lr)
             results[name]['time'].append(model.history['time'])
             results[name]['samples'] = epochs * sample.epoch_length
-            logging.info(f'{name} seed {seed}: test log-loss {log_loss[-1]:.4f}, test accuracy {accuracy[-1]:.4f}, '
-                         f'training time {model.history["time"]:.2f} s '
-                         f'({1e6 * model.history["time"] / (epochs * sample.epoch_length):.2f} us/sample)')
+            logging.info(f'{name}, order {seed + 1}/{args.seeds}: test log-loss {log_loss[-1]:.4f}, test accuracy '
+                         f'{accuracy[-1]:.4f}, learning rate {"/".join(f"{v:g}" for v in np.atleast_1d(lr))}, '
+                         f'training {model.history["time"]:.1f} s '
+                         f'({1e6 * model.history["time"] / (epochs * sample.epoch_length):.2f} us/sample); '
+                         f'{progress.step()}')
         # Epochs at the kept iterations of the optimizers and at the end
         kept = np.arange(0, len(sample), max(len(sample) // 100, 1))
         x = np.append(kept * batch, epochs * sample.epoch_length) / sample.epoch_length
         save(args.output, x, results, title, REFERENCES.get(args.dataset, []))
 
-    print("finished")
+    logging.info(f'finished in {progress.elapsed()}')

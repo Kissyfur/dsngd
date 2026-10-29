@@ -105,26 +105,18 @@ class CanonicalStatisticTests(unittest.TestCase):
         values = statistic.sample(np.tile(theta[:, None], (1, 100000)), np.random.default_rng(2))
         np.testing.assert_allclose(np.bincount(values, minlength=4) / len(values), probabilities, atol=0.01)
 
-    def test_dsngd_terms_match_generic_formula_with_categorical_score(self):
-        # g_j = 1{x=j} / p_j - 1{x=K} / p_K (Table 1) inserted in the generic Naive Bayes formula
-        rng = np.random.default_rng(3)
-        many_values, many_classes = 4, 3
+    def test_hessian_gives_the_categorical_score(self):
+        # H(theta*) (T(x) - theta*) is the score g_j = 1{x=j} / p_j - 1{x=K} / p_K of Table 1
+        many_values = 4
         statistic = CanonicalStatistic(many_values)
-        alpha_dual = rng.uniform(1., 3., size=many_classes)
-        dual = rng.dirichlet(np.ones(many_values), size=many_classes).T * alpha_dual
-        x = np.array([0, 3, 1, 3, 2, 0])
-        q_minus_e = rng.normal(size=(len(x), many_classes))
-
-        block, alpha_term = statistic.dsngd_terms(x, dual, alpha_dual, q_minus_e)
-
-        p = dual / alpha_dual
+        p = np.random.default_rng(3).dirichlet(np.ones(many_values), size=3).T
         theta_star = p[:-1]
-        g = (np.eye(many_values)[x].T[:-1, :, None] / theta_star[:, None, :]
-             - (x == many_values - 1)[None, :, None] / p[-1])
-        u_q = q_minus_e * np.sum(alpha_dual) / alpha_dual
-        np.testing.assert_allclose(block, np.sum(g * u_q, axis=1))
-        w = 1. - np.sum(theta_star[:, None, :] * g, axis=0)
-        np.testing.assert_allclose(alpha_term, np.sum(w * u_q, axis=0))
+        x = np.array([0, 3, 1, 3, 2, 0])
+        residual = statistic.transform(x).T[:, :, None] - theta_star[:, None, :]
+        expected = (np.eye(many_values)[x].T[:-1, :, None] / theta_star[:, None, :]
+                    - (x == many_values - 1)[None, :, None] / p[-1])
+        np.testing.assert_allclose(statistic.dual_hessian_product(theta_star[:, None, :], residual), expected,
+                                   atol=1e-12)
 
 
 class CanonicalFeatureStatisticTests(unittest.TestCase):
@@ -142,6 +134,21 @@ class CanonicalFeatureStatisticTests(unittest.TestCase):
         T = CanonicalFeatureStatistic([10, 5])
         self.assertTrue(T.discrete)
         self.assertEqual((T.dim, T.dual_dim, T.r, T.psi), (13, 15, 2, 50))
+
+    def test_features_of_the_same_family_are_computed_together(self):
+        # Features of a family that are not contiguous are computed together and placed in their rows and columns
+        T = CanonicalFeatureStatistic([3, GaussianMeanVarianceStatistic(), PoissonStatistic(), 3,
+                                       GaussianMeanVarianceStatistic(), 2])
+        self.assertEqual(len(T.groups), 4)
+        x = np.array([[0, 0.5, 2., 1, -1., 1], [2, -1., 0., 0, 3., 0]])
+        np.testing.assert_allclose(T.transform(x), np.hstack([cs.transform(x[:, j])
+                                                             for j, cs in enumerate(T.canonical_statistics)]))
+        np.testing.assert_allclose(T.identity(x), np.hstack([cs.identity(x[:, j])
+                                                            for j, cs in enumerate(T.canonical_statistics)]))
+        np.testing.assert_allclose(T.identity(x)[:, T.expectation_rows], T.transform(x))
+        beta = np.tile(T.initial_natural()[:, None], (1, 20000))
+        sample = T.sample(beta, np.random.default_rng(1))
+        np.testing.assert_allclose(np.mean(T.identity(sample), axis=0), T.expectation(beta[:, :1])[:, 0], atol=0.04)
 
 
 if __name__ == '__main__':
