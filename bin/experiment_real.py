@@ -25,8 +25,8 @@ ALGORITHMS = {algo_class.CLASS_NAME: algo_class
 DEFAULTS = {'covertype': {'epochs': 3, 'n_lr': 500 * 250, 'features': 'natural'},
             'mnist': {'epochs': 20, 'n_lr': 100 * 250, 'features': 'levels'}}
 FEATURES = {'covertype': ['natural', 'gaussian'], 'mnist': ['levels', 'bernoulli', 'gaussian']}
-# Known results of other models, drawn on the accuracy plot. LeNet-5 (about 60,000 parameters) has a test error of
-# 0.95% without distortions, which it reaches after about 10 of its 20 passes through the training set
+# Known results of other models, drawn on the accuracy plot. Trained without distortions, the test error of LeNet-5
+# (about 60,000 parameters) stabilizes at 0.95% after about 10 of its 20 passes through the training set
 # (LeCun et al., Gradient-based learning applied to document recognition, Proc. IEEE 86(11), 1998).
 REFERENCES = {'mnist': [{'label': 'LeNet-5 (LeCun et al., 1998)', 'accuracy': 1. - 0.0095, 'epochs': 10}]}
 
