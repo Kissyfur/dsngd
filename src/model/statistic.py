@@ -19,6 +19,15 @@ class Statistic:
         # Statistic accumulated by the DSNGD dual parameter
         return self.transform(rv)
 
+    def dsngd_block(self, dual, alpha_dual, m, a):
+        # Theorem 3.2 for the features of a group, with the components along the first axis and the features along the
+        # second: the block H(theta*) (M - a theta*) of the direction, and its inner products with theta* summed over
+        # the features. dual and m are the dual parameter and the weighted sums of identity, whose first dim
+        # components belong to the statistic. Families whose product by H simplifies override it.
+        theta_star = dual[:self.dim] / alpha_dual
+        block = self.dual_hessian_product(theta_star, m[:self.dim] - theta_star * a)
+        return block, np.sum(theta_star * block, axis=(0, 1))
+
 
 class CanonicalStatistic(Statistic):
     discrete = True
@@ -75,6 +84,13 @@ class CanonicalStatistic(Statistic):
     def dual_hessian_product(self, theta_star, rho):
         # theta* = (p_1, ..., p_{m-1}) and H(theta*) rho = rho_i / p_i + sum(rho) / p_m
         return rho / theta_star + np.sum(rho, axis=0) / (1. - np.sum(theta_star, axis=0))
+
+    def dsngd_block(self, dual, alpha_dual, m, a):
+        # Theorem 3.2 simplified as in Proposition 3.3. With N_v the weighted counts of the values and p_v their
+        # probabilities, H(theta*) (M - a theta*) = N_i / p_i - N_m / p_m, whose inner product with theta* is
+        # a - N_m / p_m, so no product by H is needed
+        ratios = m * alpha_dual / dual
+        return ratios[:-1] - ratios[-1], np.sum(a - ratios[-1], axis=0)
 
     def max_entropy_dual(self, psi, many_classes):
         return psi / (self.many_values * many_classes)
@@ -518,14 +534,13 @@ class BetaStatistic(DirichletStatistic):
 class FeatureGroup:
     """Features with the same family and parameters, which are computed together.
 
-    Feature after feature, it holds their columns of the data, their rows of beta and of the dual parameter, and the
-    rows of the dual parameter that hold their expectation parameters (all but the last value of a categorical feature).
+    Feature after feature, it holds their columns of the data and their rows of beta and of the dual parameter.
     """
 
     def __init__(self, statistic):
         self.statistic = statistic
         self.size = 0
-        self.columns, self.rows, self.dual_rows, self.expectation_rows = [], [], [], []
+        self.columns, self.rows, self.dual_rows = [], [], []
 
     def add(self, column, row, dual_row):
         cs = self.statistic
@@ -533,7 +548,6 @@ class FeatureGroup:
         self.columns = np.append(self.columns, np.arange(column, column + cs.input_dim)).astype(int)
         self.rows = np.append(self.rows, np.arange(row, row + cs.dim)).astype(int)
         self.dual_rows = np.append(self.dual_rows, np.arange(dual_row, dual_row + cs.dual_dim)).astype(int)
-        self.expectation_rows = np.append(self.expectation_rows, np.arange(dual_row, dual_row + cs.dim)).astype(int)
 
     def values(self, rvs):
         # One row for each observation and feature
@@ -541,11 +555,12 @@ class FeatureGroup:
         return values[:, 0] if self.statistic.input_dim == 1 else values
 
     def stack(self, parameters):
-        # From the rows of the group to (component, feature, ...), the layout of the parameters of a statistic
-        return np.swapaxes(parameters.reshape((self.size, self.statistic.dim) + parameters.shape[1:]), 0, 1)
+        # From rows of the group (of beta or of the dual parameter) to (component, feature, ...), the layout of the
+        # parameters of a statistic
+        return np.swapaxes(parameters.reshape((self.size, -1) + parameters.shape[1:]), 0, 1)
 
     def unstack(self, parameters):
-        return np.swapaxes(parameters, 0, 1).reshape((self.size * self.statistic.dim,) + parameters.shape[2:])
+        return np.swapaxes(parameters, 0, 1).reshape((-1,) + parameters.shape[2:])
 
 
 class CanonicalFeatureStatistic(Statistic):

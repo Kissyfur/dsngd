@@ -68,8 +68,10 @@ the direction of a mini-batch from the same sums of statistics as SGD. For the G
 families the natural parameters are recovered from the expectation parameters with a few Newton steps. The features of
 each family are computed together: the sums of statistics of all the features come from one matrix product, and each
 family applies its Hessian to all its features at once, so its methods take parameters with the components along the
-first axis and any number of further axes. Categorical features use the same formula, which reproduces the discrete
-results of the original implementation up to floating point rounding. With continuous
+first axis and any number of further axes. `dsngd_block` computes the block of the direction of each family as in the
+paper; a family whose product by the Hessian simplifies overrides it, as the categorical family does with the weighted
+counts of its values. This reproduces the discrete results of the original implementation up to floating point
+rounding. With continuous
 features the error is the KL divergence between the true and the estimated conditional distributions, computed on a
 Monte Carlo sample of x (exact over y).
 

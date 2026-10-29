@@ -4,7 +4,7 @@ import numpy as np
 
 from src.model.statistic import (BetaStatistic, CanonicalFeatureStatistic, CanonicalStatistic, DirichletStatistic,
                                  ExponentialStatistic, GammaStatistic, GaussianMeanVarianceStatistic,
-                                 GaussianStatistic, MultivariateGaussianStatistic, PoissonStatistic,
+                                 GaussianStatistic, MultivariateGaussianStatistic, PoissonStatistic, Statistic,
                                  VonMisesStatistic)
 
 MULTIVARIATE_GAUSSIAN = MultivariateGaussianStatistic(2)
@@ -117,6 +117,19 @@ class CanonicalStatisticTests(unittest.TestCase):
                     - (x == many_values - 1)[None, :, None] / p[-1])
         np.testing.assert_allclose(statistic.dual_hessian_product(theta_star[:, None, :], residual), expected,
                                    atol=1e-12)
+
+    def test_block_of_the_direction_without_products_by_the_hessian(self):
+        # The categorical block N_i / p_i - N_m / p_m (Proposition 3.3) is H(theta*) (M - a theta*) (Theorem 3.2)
+        rng = np.random.default_rng(5)
+        statistic = CanonicalStatistic(4)
+        alpha_dual = rng.uniform(5., 10., size=3)
+        dual = rng.dirichlet(np.ones(4), size=(2, 3)).transpose(2, 0, 1) * alpha_dual
+        values, w = rng.integers(0, 4, size=(6, 2)), rng.normal(size=(6, 3))
+        m = np.stack([np.dot(np.eye(4)[values[:, j]].T, w) for j in range(2)], axis=1)
+        a = np.sum(w, axis=0)
+        for actual, expected in zip(statistic.dsngd_block(dual, alpha_dual, m, a),
+                                    Statistic.dsngd_block(statistic, dual, alpha_dual, m, a)):
+            np.testing.assert_allclose(actual, expected)
 
 
 class ExactSpeedUpTests(unittest.TestCase):

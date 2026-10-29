@@ -19,24 +19,28 @@ class DSNGD_JointMLR(LineSearch):
         self.model = model
         # self.lr_training_function = self.lr_cost_function
 
-    def aprox_natural_gradient_log_conditional_probability(self, sample, eta, dual_parameter, tx=None):
-        # Theorem 3.2: the statistics weighted by the rescaled residuals w, T(x)^T w, in one product for all the
-        # features, and H(theta*) applied to the features of each family together. tx is the statistic of x, if known.
+    def aprox_natural_gradient_log_conditional_probability(self, sample, eta, dual_parameter, identity=None):
+        # Theorem 3.2. The rescaled residuals w = D_Y(zeta*) q, their sum a and the sums M of identity(x) weighted by w,
+        # which hold T(x)^T w and the weighted counts of all the values of the categorical features, come from one
+        # product for all the features. Each family computes the blocks H(theta*) (M - a theta*) of its features
+        # together, and c = a - sum of <theta*, block>. identity is the statistic of x accumulated by the dual
+        # parameter, if already computed.
         x, y = sample
         alpha_dual, beta_dual = dual_parameter
-        tx = self.model.T.transform(x) if tx is None else tx
+        identity = self.model.T.identity(x) if identity is None else identity
         py_inv = np.sum(alpha_dual) / alpha_dual
 
+        tx = identity[:, self.model.T.expectation_rows]
         w = (self.model.conditional_probabilities(x, [eta], tx)[0] - self.model.S.identity(y)) * py_inv
         a = np.sum(w, axis=0)
-        m = np.dot(tx.T, w)
+        m = np.dot(identity.T, w)
         ng_alpha = a.copy()
-        ng_beta = np.empty_like(m)
+        ng_beta = np.empty((self.model.T.dim, len(a)))
         for group in self.model.T.groups:
-            theta_star = group.stack(beta_dual[group.expectation_rows] / alpha_dual)
-            block = group.statistic.dual_hessian_product(theta_star, group.stack(m[group.rows]) - theta_star * a)
+            block, products = group.statistic.dsngd_block(group.stack(beta_dual[group.dual_rows]), alpha_dual,
+                                                          group.stack(m[group.dual_rows]), a)
             ng_beta[group.rows] = group.unstack(block)
-            ng_alpha -= np.sum(theta_star * block, axis=(0, 1))
+            ng_alpha -= products
 
         ng_alpha = ng_alpha[:-1] - ng_alpha[-1]
         return ng_alpha, ng_beta
@@ -54,8 +58,7 @@ class DSNGD_JointMLR(LineSearch):
                 etas.append([alpha.copy(), beta.copy()])
             # The statistic of the batch serves the direction and the update of the dual parameter
             id_x = self.model.T.identity(obs[0])
-            ng_alpha, ng_beta = self.director_process(obs, (alpha, beta), (alpha_dual, beta_dual),
-                                                      id_x[:, self.model.T.expectation_rows])
+            ng_alpha, ng_beta = self.director_process(obs, (alpha, beta), (alpha_dual, beta_dual), id_x)
             r = self.lr_update(it, lr)
             alpha -= r * ng_alpha
             beta -= r * ng_beta
