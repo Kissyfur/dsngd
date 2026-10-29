@@ -4,10 +4,11 @@ import numpy as np
 
 from src.algorithms.dsngd import DSNGD_JointMLR
 from src.algorithms.sgd import SGD_JointMLR
+from src.data.sample_creator import JointMLRSampleIterator
 from src.model.joint_mlr import JointMLR
 from src.model.statistic import (BetaStatistic, DirichletStatistic, ExponentialStatistic, GammaStatistic,
                                  GaussianMeanVarianceStatistic, GaussianStatistic, MultivariateGaussianStatistic,
-                                 PoissonStatistic, VonMisesStatistic)
+                                 NaturalPointStatistic, PoissonStatistic, VonMisesStatistic)
 
 MODELS = {
     'discrete': [2, 4, 3],
@@ -75,6 +76,26 @@ class NaturalGradientTests(unittest.TestCase):
 
                 error = np.linalg.norm(direction - natural_gradient) / np.linalg.norm(natural_gradient)
                 self.assertLess(error, 1e-5)
+
+    def test_points_in_natural_coordinates_follow_the_map_sequence(self):
+        # Along the dual parameters of a run, the auxiliary points of the Gamma, Beta, Dirichlet and von Mises features,
+        # kept in natural coordinates, approach those of the MAP sequence, and the others are those of the MAP sequence
+        model = JointMLR(3, MODELS['mixed'])
+        np.random.seed(2)
+        model.set_random_eta(0.8)
+        dsngd = DSNGD_JointMLR(model)
+        dual = dsngd.max_entropy_dual_parameter()
+        points = dsngd.auxiliary_points(dual)
+        for x, y in JointMLRSampleIterator(model, 20000, 1, 100, random_seed=3):
+            id_y = model.S.identity(y)
+            dual = (dual[0] + np.sum(id_y, axis=0), dual[1] + np.dot(model.T.identity(x).T, id_y))
+            points = dsngd.auxiliary_points(dual, points)
+        for group, point, map_point in zip(model.T.groups, points, dsngd.auxiliary_points(dual)):
+            with self.subTest(statistic=group.statistic):
+                if isinstance(group.statistic, NaturalPointStatistic):
+                    np.testing.assert_allclose(point[0], map_point[0], rtol=1e-3, atol=1e-4)
+                else:
+                    np.testing.assert_array_equal(point, map_point)
 
     def test_max_entropy_dual_of_mixed_features(self):
         model = JointMLR(2, [4, GaussianMeanVarianceStatistic(), ExponentialStatistic()])

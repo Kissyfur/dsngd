@@ -19,12 +19,17 @@ class Statistic:
         # Statistic accumulated by the DSNGD dual parameter
         return self.transform(rv)
 
-    def dsngd_block(self, dual, alpha_dual, m, a):
-        # Theorem 3.2 for the features of a group, with the components along the first axis and the features along the
-        # second: the block H(theta*) (M - a theta*) of the direction, and its inner products with theta* summed over
-        # the features. dual and m are the dual parameter and the weighted sums of identity, whose first dim
+    def auxiliary_point(self, dual, alpha_dual, previous=None):
+        # Auxiliary point of DSNGD for the features of a group, with the components along the first axis and the
+        # features along the second, from their rows of the dual parameter: theta*, the average of the statistic.
+        # Families that keep the point in other coordinates override it, and previous is their point at the previous
+        # iteration.
+        return dual[:self.dim] / alpha_dual
+
+    def dsngd_block(self, theta_star, m, a):
+        # Theorem 3.2 for the features of a group: the block H(theta*) (M - a theta*) of the direction, and its inner
+        # products with theta* summed over the features. m holds the weighted sums of identity, whose first dim
         # components belong to the statistic. Families whose product by H simplifies override it.
-        theta_star = dual[:self.dim] / alpha_dual
         block = self.dual_hessian_product(theta_star, m[:self.dim] - theta_star * a)
         return block, np.sum(theta_star * block, axis=(0, 1))
 
@@ -85,11 +90,15 @@ class CanonicalStatistic(Statistic):
         # theta* = (p_1, ..., p_{m-1}) and H(theta*) rho = rho_i / p_i + sum(rho) / p_m
         return rho / theta_star + np.sum(rho, axis=0) / (1. - np.sum(theta_star, axis=0))
 
-    def dsngd_block(self, dual, alpha_dual, m, a):
+    def auxiliary_point(self, dual, alpha_dual, previous=None):
+        # The probabilities of all the values
+        return dual / alpha_dual
+
+    def dsngd_block(self, probabilities, m, a):
         # Theorem 3.2 simplified as in Proposition 3.3. With N_v the weighted counts of the values and p_v their
         # probabilities, H(theta*) (M - a theta*) = N_i / p_i - N_m / p_m, whose inner product with theta* is
         # a - N_m / p_m, so no product by H is needed
-        ratios = m * alpha_dual / dual
+        ratios = m / probabilities
         return ratios[:-1] - ratios[-1], np.sum(a - ratios[-1], axis=0)
 
     def max_entropy_dual(self, psi, many_classes):
@@ -123,6 +132,29 @@ class ExponentialFamilyStatistic(Statistic):
         arguments = ', '.join(f'{key}={value}' for key, value in vars(self).items()
                               if key not in ('dim', 'dual_dim', 'input_dim') and not key.startswith('_'))
         return f'{type(self).__name__}({arguments})'
+
+
+class NaturalPointStatistic(ExponentialFamilyStatistic):
+    """Family whose natural parameter theta is implicit in the expectation parameter theta*, while theta* and H(theta*)
+    are explicit in theta, as Gamma, Beta, Dirichlet and von Mises. natural finds theta from theta* with Newton's
+    method, natural_point gives theta* and the factors of H at theta, and hessian_product applies H with them.
+
+    DSNGD keeps the auxiliary point of these families in natural coordinates. The first point is the solution of
+    Newton's method at the average of the statistic, and then the point follows the average with one Newton step per
+    iteration (newton_step), which uses the H of the point.
+    """
+
+    def dual_hessian_product(self, theta_star, rho):
+        return self.hessian_product(self.natural_point(self.natural(theta_star))[1], rho)
+
+    def auxiliary_point(self, dual, alpha_dual, previous=None):
+        average = dual / alpha_dual
+        return self.natural_point(self.natural(average) if previous is None else self.newton_step(previous, average))
+
+    def dsngd_block(self, point, m, a):
+        theta_star, factors = point
+        block = self.hessian_product(factors, m - theta_star * a)
+        return block, np.sum(theta_star * block, axis=(0, 1))
 
 
 class GaussianStatistic(ExponentialFamilyStatistic):
@@ -304,7 +336,7 @@ class PoissonStatistic(ExponentialFamilyStatistic):
         return rng.poisson(np.exp(theta[0])).astype(float)
 
 
-class VonMisesStatistic(ExponentialFamilyStatistic):
+class VonMisesStatistic(NaturalPointStatistic):
     """Von Mises distribution of an angle (in radians), T(x) = (cos x, sin x) and theta = kappa (cos mu, sin mu)."""
 
     def __init__(self, newton_steps=10):
@@ -340,18 +372,31 @@ class VonMisesStatistic(ExponentialFamilyStatistic):
                 break
         return kappa
 
-    def dual_hessian_product(self, theta_star, rho):
-        # (hess F)^-1 rho with hess F = A'(kappa) u u^T + A(kappa) / kappa (I - u u^T), u the mean direction
-        theta_star, rho = np.broadcast_arrays(theta_star, rho)
-        length = np.sqrt(np.sum(theta_star * theta_star, axis=0))
-        safe = np.maximum(length, 1e-12)
-        kappa = self.concentration(safe)
+    def natural(self, theta_star):
+        length = np.maximum(np.sqrt(np.sum(theta_star * theta_star, axis=0)), 1e-12)
+        return self.concentration(length) * theta_star / length
+
+    def natural_point(self, theta):
+        # theta* and the factors of H: kappa, A(kappa), A'(kappa) = 1 - A / kappa - A^2 and the mean direction u. At the
+        # uniform distribution, theta = 0, u is 0 and H = 2 I.
+        kappa = np.maximum(np.sqrt(np.sum(theta * theta, axis=0)), 1e-12)
         a = self.mean_resultant(kappa)
-        u = theta_star / safe
+        u = theta / kappa
+        return a * u, (kappa, a, 1. - a / kappa - a * a, u)
+
+    @staticmethod
+    def hessian_product(factors, rho):
+        # (hess F)^-1 rho with hess F = A'(kappa) u u^T + A(kappa) / kappa (I - u u^T)
+        kappa, a, derivative, u = factors
         radial = np.sum(u * rho, axis=0)
-        product = radial / (1. - a / kappa - a * a) * u + kappa / a * (rho - radial * u)
-        # At the uniform distribution the Hessian is I / 2
-        return np.where(length > 1e-12, product, 2. * rho)
+        return radial / derivative * u + kappa / a * (rho - radial * u)
+
+    def newton_step(self, point, average):
+        # The direction of the average, and Newton's step on kappa toward A(kappa) = |average|, with decreases limited to
+        # a factor e
+        _, (kappa, a, derivative, _) = point
+        length = np.maximum(np.sqrt(np.sum(average * average, axis=0)), 1e-12)
+        return np.maximum(kappa + (length - a) / derivative, kappa / np.e) * average / length
 
     def initial_natural(self):
         return np.zeros(2)
@@ -389,7 +434,7 @@ class ExponentialStatistic(ExponentialFamilyStatistic):
         return -1. / theta[0] * rng.standard_exponential(theta[0].shape)
 
 
-class GammaStatistic(ExponentialFamilyStatistic):
+class GammaStatistic(NaturalPointStatistic):
     """Gamma with unknown shape k and rate l, T(x) = (x, log x) and theta = (-l, k - 1)."""
 
     def __init__(self, newton_steps=8):
@@ -420,13 +465,30 @@ class GammaStatistic(ExponentialFamilyStatistic):
                 break
         return shape, shape / theta_star[0]
 
-    def dual_hessian_product(self, theta_star, rho):
-        # (hess F)^-1 rho with hess F = [[k / l^2, 1 / l], [1 / l, trigamma(k)]]
+    def natural(self, theta_star):
         shape, rate = self.shape_rate(theta_star)
-        trigamma_shape = trigamma(shape)
+        return np.stack([-rate, shape - 1.])
+
+    def natural_point(self, theta):
+        # theta* and the factors of H: the shape, the rate and trigamma(shape)
+        shape, rate = theta[1] + 1., -theta[0]
+        return self.expectation(theta), (shape, rate, trigamma(shape))
+
+    @staticmethod
+    def hessian_product(factors, rho):
+        # (hess F)^-1 rho with hess F = [[k / l^2, 1 / l], [1 / l, trigamma(k)]]
+        shape, rate, trigamma_shape = factors
         determinant = (shape * trigamma_shape - 1.) / rate ** 2
         return np.stack([trigamma_shape * rho[0] - rho[1] / rate,
                          shape * rho[1] / rate ** 2 - rho[0] / rate]) / determinant
+
+    def newton_step(self, point, average):
+        # Newton's step H(theta*) (average - theta*) on the logarithms of the shape and the rate, limited to a factor e
+        theta_star, factors = point
+        shape, rate, _ = factors
+        step = self.hessian_product(factors, average - theta_star)
+        return np.stack([-rate * np.exp(np.clip(-step[0] / rate, -1., 1.)),
+                         shape * np.exp(np.clip(step[1] / shape, -1., 1.)) - 1.])
 
     def initial_natural(self):
         return np.array([-1., 0.])
@@ -453,7 +515,7 @@ def inverse_digamma(y, newton_steps=5):
     return x
 
 
-class DirichletStatistic(ExponentialFamilyStatistic):
+class DirichletStatistic(NaturalPointStatistic):
     """Dirichlet on the simplex of R^K, T(x) = (log x_1, ..., log x_K) and theta = (a_1 - 1, ..., a_K - 1)."""
 
     def __init__(self, K, fixed_point_steps=10, newton_steps=15):
@@ -475,17 +537,32 @@ class DirichletStatistic(ExponentialFamilyStatistic):
         a = theta + 1.
         return digamma(a) - digamma(np.sum(a, axis=0))
 
-    def hessian_solve(self, a, rho):
+    def natural(self, theta_star):
+        return self.parameters(theta_star) - 1.
+
+    def natural_point(self, theta):
+        # theta* and the factors of H: a, trigamma(a) and trigamma(sum(a))
+        a = theta + 1.
+        return self.expectation(theta), (a, trigamma(a), trigamma(np.sum(a, axis=0)))
+
+    @staticmethod
+    def hessian_product(factors, rho):
         # (hess F)^-1 rho with hess F = diag(trigamma(a)) - trigamma(sum(a)) 1 1^T, by Sherman-Morrison
-        d = trigamma(a)
-        c = trigamma(np.sum(a, axis=0))
+        _, d, c = factors
         z = rho / d
         return z + c * np.sum(z, axis=0) / (1. - c * np.sum(1. / d, axis=0)) / d
 
+    def log_step(self, point, average):
+        # Newton's step H(theta*) (average - theta*) on log(a), limited to a factor e
+        theta_star, factors = point
+        return np.clip(self.hessian_product(factors, average - theta_star) / factors[0], -1., 1.)
+
+    def newton_step(self, point, average):
+        return point[1][0] * np.exp(self.log_step(point, average)) - 1.
+
     def parameters(self, theta_star):
-        # Inverse of the expectation: fixed point iteration of Minka (2000) followed by Newton's method on log(a),
-        # with steps limited to a factor e. Newton starts from the previous solution when theta* barely changed, as
-        # happens between consecutive DSNGD iterations.
+        # Inverse of the expectation: fixed point iteration of Minka (2000) followed by Newton's method on log(a).
+        # Newton starts from the previous solution when theta* barely changed.
         last = self._last.get(theta_star.shape)
         if last is not None and np.max(np.abs(last[0] - theta_star)) < 0.05:
             a = last[1]
@@ -494,15 +571,12 @@ class DirichletStatistic(ExponentialFamilyStatistic):
             for _ in range(self.fixed_point_steps):
                 a = inverse_digamma(digamma(np.sum(a, axis=0)) + theta_star)
         for _ in range(self.newton_steps):
-            step = np.clip(self.hessian_solve(a, self.expectation(a - 1.) - theta_star) / a, -1., 1.)
-            a = a * np.exp(-step)
+            step = self.log_step(self.natural_point(a - 1.), theta_star)
+            a = a * np.exp(step)
             if np.max(np.abs(step)) < 1e-12:
                 break
         self._last[theta_star.shape] = (theta_star.copy(), a)
         return a
-
-    def dual_hessian_product(self, theta_star, rho):
-        return self.hessian_solve(self.parameters(theta_star), rho)
 
     def initial_natural(self):
         return np.zeros(self.K)

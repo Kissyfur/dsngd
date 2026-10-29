@@ -64,14 +64,17 @@ model = JointMLR(10, [10, GaussianMeanVarianceStatistic(), PoissonStatistic()])
 
 DSNGD only needs from each family the product of a vector by the Hessian of the conjugate of its log-partition at the
 expectation parameter (`dual_hessian_product`), which gives the score in expectation coordinates and lets DSNGD compute
-the direction of a mini-batch from the same sums of statistics as SGD. For the Gamma, Beta, Dirichlet and von Mises
-families the natural parameters are recovered from the expectation parameters with a few Newton steps. The features of
-each family are computed together: the sums of statistics of all the features come from one matrix product, and each
-family applies its Hessian to all its features at once, so its methods take parameters with the components along the
-first axis and any number of further axes. `dsngd_block` computes the block of the direction of each family as in the
-paper; a family whose product by the Hessian simplifies overrides it, as the categorical family does with the weighted
-counts of its values. This reproduces the discrete results of the original implementation up to floating point
-rounding. With continuous
+the direction of a mini-batch from the same sums of statistics as SGD. The features of each family are computed
+together: the sums of statistics of all the features come from one matrix product, and each family applies its Hessian
+to all its features at once, so its methods take parameters with the components along the first axis and any number of
+further axes. `dsngd_block` computes the block of the direction of each family as in the paper, at the auxiliary point
+that `auxiliary_point` gives from the dual parameter; a family whose product by the Hessian simplifies overrides it, as
+the categorical family does with the weighted counts of its values. The natural parameters of the Gamma, Beta,
+Dirichlet and von Mises families are implicit in their expectation parameters, while the expectation parameters and the
+Hessian are explicit in the natural parameters, so these families (`NaturalPointStatistic`) keep the auxiliary point in
+natural coordinates: the first point is found with Newton's method, and then the point follows the average of the
+statistics with one Newton step per iteration, which uses the Hessian of the direction. This reproduces the discrete
+results of the original implementation up to floating point rounding. With continuous
 features the error is the KL divergence between the true and the estimated conditional distributions, computed on a
 Monte Carlo sample of x (exact over y).
 

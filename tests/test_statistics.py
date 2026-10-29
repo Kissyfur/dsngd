@@ -127,9 +127,62 @@ class CanonicalStatisticTests(unittest.TestCase):
         values, w = rng.integers(0, 4, size=(6, 2)), rng.normal(size=(6, 3))
         m = np.stack([np.dot(np.eye(4)[values[:, j]].T, w) for j in range(2)], axis=1)
         a = np.sum(w, axis=0)
-        for actual, expected in zip(statistic.dsngd_block(dual, alpha_dual, m, a),
-                                    Statistic.dsngd_block(statistic, dual, alpha_dual, m, a)):
+        for actual, expected in zip(statistic.dsngd_block(statistic.auxiliary_point(dual, alpha_dual), m, a),
+                                    Statistic.dsngd_block(statistic, Statistic.auxiliary_point(statistic, dual,
+                                                                                               alpha_dual), m, a)):
             np.testing.assert_allclose(actual, expected)
+
+
+class NaturalPointTests(unittest.TestCase):
+    """Gamma, Beta, Dirichlet and von Mises, whose auxiliary point is kept in natural coordinates."""
+    names = ['gamma', 'beta', 'von-mises', 'dirichlet']
+
+    def test_natural_point_gives_expectation_and_hessian(self):
+        rng = np.random.default_rng(6)
+        for name in self.names:
+            family, theta, _ = FAMILIES[name]
+            with self.subTest(family=name):
+                theta_star, factors = family.natural_point(theta[:, None])
+                np.testing.assert_allclose(theta_star[:, 0], family.expectation(theta), rtol=1e-12)
+                np.testing.assert_allclose(family.natural(theta_star)[:, 0], theta, rtol=1e-8)
+                rho = rng.normal(size=(family.dim, 1))
+                hessian = finite_difference_jacobian(family.expectation, theta)
+                np.testing.assert_allclose(family.hessian_product(factors, rho), np.linalg.solve(hessian, rho),
+                                           rtol=1e-5, atol=1e-7)
+
+    def test_auxiliary_point_follows_the_average(self):
+        # The first point is at the average. One Newton step toward a moved average leaves an error of the order of
+        # the square of the move, and a few steps reach averages far away.
+        rng = np.random.default_rng(7)
+        for name in self.names:
+            family = FAMILIES[name][0]
+            with self.subTest(family=name):
+                theta = family.random_natural(rng.normal(0., 0.5, size=(family.dim, 3, 4)))
+                alpha_dual = rng.uniform(50., 100., size=4)
+                average = family.expectation(theta)
+                point = family.auxiliary_point(average * alpha_dual, alpha_dual)
+                np.testing.assert_allclose(point[0], average, rtol=1e-12, atol=1e-14)
+                moved = family.expectation(theta + rng.normal(0., 1e-3, size=theta.shape))
+                step = family.auxiliary_point(moved * alpha_dual, alpha_dual, point)
+                self.assertLess(np.max(np.abs(step[0] - moved)), 0.02 * np.max(np.abs(moved - average)))
+                for _ in range(10):
+                    far = family.expectation(family.random_natural(rng.normal(0., 2., size=theta.shape)))
+                    far_point = point
+                    for _ in range(50):
+                        far_point = family.auxiliary_point(far * alpha_dual, alpha_dual, far_point)
+                    np.testing.assert_allclose(far_point[0], far, rtol=1e-10, atol=1e-12)
+
+    def test_block_at_a_natural_point(self):
+        # The block of Theorem 3.2 at a natural point is that of the general formula at its theta*
+        rng = np.random.default_rng(8)
+        for name in self.names:
+            family = FAMILIES[name][0]
+            with self.subTest(family=name):
+                point = family.natural_point(family.random_natural(rng.normal(0., 0.5, size=(family.dim, 3, 4))))
+                m, a = rng.normal(size=(family.dim, 3, 4)), rng.normal(size=4)
+                for actual, expected in zip(family.dsngd_block(point, m, a),
+                                            Statistic.dsngd_block(family, point[0], m, a)):
+                    np.testing.assert_allclose(actual, expected, rtol=1e-10)
 
 
 class ExactSpeedUpTests(unittest.TestCase):
