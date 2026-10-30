@@ -91,7 +91,12 @@ PYTHONPATH=. python bin/experiment.py --features gaussian --output outputs/gauss
 `--features` can be `discrete`, `gaussian`, `gaussian-mv`, `poisson`, `exponential`, `gamma`, `beta`,
 `multivariate-gaussian`, `dirichlet` or `mixed` (each 5-valued feature replaced by Gaussian, Poisson and exponential
 features). The figure and the curves are saved in the given
-path. The real data experiments use Covertype and MNIST, downloaded to `saved_data/`, with `--features` choosing the model
+path. `--manifolds` and `--entropies` run only some manifolds (1, 2, 3) and entropies (`high`, `medium`, `low`): their
+curves replace those of the same manifolds and entropies in the output, the others are kept, and the figure shows them
+all. The output must then hold the same algorithms, number of experiments (`--experiments`) and length of the training
+sample (`--n`). Each experiment draws its problem and samples from seeds given by its number, so a manifold and entropy
+run alone gives the same results as in a run of all of them.
+The real data experiments use Covertype and MNIST, downloaded to `saved_data/`, with `--features` choosing the model
 of the features, and the learning rate search starts at initial rates of 10^-7 (`--min-lr-exponent`) instead of the
 10^-4 of the synthetic experiments, since the best rates of DSNGD are smaller on these data. For Covertype, `natural` gives each variable a family according to its nature (Gaussian for elevation
 and vertical distance, von Mises for the aspect, Gamma for the slope and the distances, Beta for the hillshade indices
@@ -105,15 +110,24 @@ PYTHONPATH=. python bin/experiment_real.py --dataset mnist --features levels --o
 ```
 
 `bin/run_experiments.sh` runs all the experiments of the paper, `JOBS` at a time (6 by default), with `EXPERIMENTS`
-repetitions of each synthetic problem (1 by default); a second argument `synthetic` or `real` runs only one part. Each
-experiment writes one log line per training, with its result, the elapsed time and the expected remaining time.
-`bin/summarize.py` prints the final errors, LaTeX rows for the tables of real data and computational time, and copies
-the figures to `manuscript/figures`:
+repetitions of each synthetic problem (1 by default, 10 in the paper); a second argument `synthetic` or `real` runs
+only one part, and further arguments only the given experiments, such as `gaussian` or `mnist:gaussian`. `MANIFOLDS`
+and `ENTROPIES` run only some manifolds and entropies of the synthetic experiments, as `--manifolds` and `--entropies`,
+with a log of their own. Each experiment writes one log line per training, with its result, the elapsed time and the
+expected remaining time. `bin/summarize.py` prints the final errors, LaTeX rows for the tables of real data and
+computational time, and copies the figures to `manuscript/figures`:
 
 ```bash
-JOBS=6 EXPERIMENTS=1 bin/run_experiments.sh python synthetic
+JOBS=6 EXPERIMENTS=10 bin/run_experiments.sh python synthetic
 tail -n 1 outputs/synthetic/*.log
 python bin/summarize.py
+```
+
+For instance, to run again M2 with high entropy for the Gaussian features, and then for all the synthetic experiments:
+
+```bash
+EXPERIMENTS=10 MANIFOLDS=2 ENTROPIES=high bin/run_experiments.sh python synthetic gaussian
+EXPERIMENTS=10 MANIFOLDS=2 ENTROPIES=high bin/run_experiments.sh python synthetic
 ```
 
 Run the tests with `python -m unittest discover -s tests`.

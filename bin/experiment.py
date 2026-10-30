@@ -1,5 +1,7 @@
 import argparse
 import logging
+import os
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -31,6 +33,7 @@ BLOCKS = {
                                       MultivariateGaussianStatistic(1)],
     'dirichlet': lambda: [DirichletStatistic(5), DirichletStatistic(4), DirichletStatistic(4)],
 }
+ENTROPIES = ['high', 'medium', 'low']
 
 
 def build_manifolds(features):
@@ -60,19 +63,44 @@ def parse_args():
     parser.add_argument('--support-size', type=int, default=100000,
                         help='Monte Carlo sample of x used to compute the KL divergence for continuous features')
     parser.add_argument('--algorithms', nargs='+', choices=list(ALGORITHMS), default=['SGD', 'AdaGrad', 'DSNGD'])
-    parser.add_argument('--output', help='Path without extension where the figure and the curves are saved')
+    parser.add_argument('--manifolds', nargs='+', type=int, choices=[1, 2, 3], default=[1, 2, 3],
+                        help='Run only these manifolds (M1, M2, M3)')
+    parser.add_argument('--entropies', nargs='+', choices=ENTROPIES, default=ENTROPIES,
+                        help='Run only these entropies')
+    parser.add_argument('--output', help='Path without extension where the figure and the curves are saved. The '
+                                         'manifolds and entropies run replace theirs in the curves of a previous run, '
+                                         'and the others are kept')
     parser.add_argument('--quiet', action='store_true', help='Hide the training progress bars')
     return parser.parse_args()
 
 
+def check_previous(file_name, labels, n, many_experiments):
+    # The curves of a previous run, which this one completes or updates, must have the same algorithms, length of the
+    # training sample and experiments per manifold and entropy
+    if not os.path.exists(file_name + '.npz'):
+        return
+    with np.load(file_name + '.npz') as previous:
+        stored = [str(label) for label in previous['labels']]
+        experiments = {previous[key].shape[1] for key in previous.files if key.startswith('curves_')}
+        if stored != labels or int(previous['n']) != n or experiments != {many_experiments}:
+            sys.exit(f"{file_name}.npz holds {'/'.join(map(str, sorted(experiments)))} experiments of "
+                     f"{', '.join(stored)} on {int(previous['n'])} observations; run with these settings to replace "
+                     f"some of its manifolds and entropies, or choose another --output")
+
+
 def save_curves(file_name, curves, lrs, times, labels, n):
     arrays = {f'curves_{i}_{j}': np.array([d[label] for label in labels]) for (i, j), d in curves.items()}
-    np.savez(file_name + '.npz', labels=labels, n=n, **arrays,
-             lrs=np.array([[i, j, exp_num, labels.index(name)] + list(np.atleast_1d(lr)) + [np.nan] * (2 - np.size(lr))
-                           for (i, j, exp_num, name), lr in lrs.items()]),
-             # manifold, entropy, experiment, algorithm, training seconds, microseconds per sample
-             times=np.array([[i, j, exp_num, labels.index(name), t, 1e6 * t / n]
-                             for (i, j, exp_num, name), t in times.items()]))
+    lr_rows = [[i, j, exp_num, labels.index(name)] + list(np.atleast_1d(lr)) + [np.nan] * (2 - np.size(lr))
+               for (i, j, exp_num, name), lr in lrs.items()]
+    # manifold, entropy, experiment, algorithm, training seconds, microseconds per sample
+    time_rows = [[i, j, exp_num, labels.index(name), t, 1e6 * t / n] for (i, j, exp_num, name), t in times.items()]
+    if os.path.exists(file_name + '.npz'):
+        # The manifolds and entropies of previous runs that this one has not run again are kept
+        with np.load(file_name + '.npz') as previous:
+            arrays = {**{key: previous[key] for key in previous.files if key.startswith('curves_')}, **arrays}
+            lr_rows = [list(row) for row in previous['lrs'] if (int(row[0]), int(row[1])) not in curves] + lr_rows
+            time_rows = [list(row) for row in previous['times'] if (int(row[0]), int(row[1])) not in curves] + time_rows
+    np.savez(file_name + '.npz', labels=labels, n=n, **arrays, lrs=np.array(lr_rows), times=np.array(time_rows))
 
 
 if __name__ == "__main__":
@@ -86,22 +114,30 @@ if __name__ == "__main__":
     manifolds = build_manifolds(args.features)
     algorithm_classes = [ALGORITHMS[name] for name in args.algorithms]
     labels = [algo_class.CLASS_NAME for algo_class in algorithm_classes]
+    if args.output:
+        check_previous(args.output, labels, n, many_experiments)
+    manifold_indices = sorted(set(m - 1 for m in args.manifolds))
+    entropy_indices = sorted(set(ENTROPIES.index(name) for name in args.entropies))
     curves = {}
     lrs = {}
     times = {}
     problems = {}
-    entropy_names = ['high', 'medium', 'low']
     dimensions = [JointMLR(s, m).alpha.size + JointMLR(s, m).beta.size for s, m in manifolds]
     # The cost of training is taken proportional to the dimension of the manifold
-    progress = Progress([((label, i), dimensions[i]) for i in range(len(manifolds)) for _ in entropies
+    progress = Progress([((label, i), dimensions[i]) for i in manifold_indices for _ in entropy_indices
                          for _ in range(many_experiments) for label in labels])
-    logging.info(f"{args.features}: manifolds of dimension {dimensions}, {len(entropies)} entropies, "
-                 f"{many_experiments} experiments and {len(labels)} algorithms, {len(progress.tasks)} trainings on "
-                 f"{n} observations")
-    for i, (s, m) in enumerate(manifolds):
-        for j, sigma_sq in enumerate(entropies):
+    logging.info(f"{args.features}: manifolds {', '.join(f'M{i + 1}' for i in manifold_indices)} of dimension "
+                 f"{[dimensions[i] for i in manifold_indices]}, "
+                 f"{', '.join(ENTROPIES[j] for j in entropy_indices)} entropy, {many_experiments} experiments and "
+                 f"{len(labels)} algorithms, {len(progress.tasks)} trainings on {n} observations")
+    for i in manifold_indices:
+        for j in entropy_indices:
+            sigma_sq = entropies[j]
             d = {algo_class.CLASS_NAME: [] for algo_class in algorithm_classes}
             for exp_num in range(many_experiments):
+                # The features of each experiment are new, since some families keep a warm start between their calls,
+                # so that an experiment gives the same results whatever ran before it
+                s, m = build_manifolds(args.features)[i]
                 problem = JointMLR(s, m)
                 np.random.seed(exp_num)
                 problem.set_random_eta(sigma_sq)
@@ -119,7 +155,7 @@ if __name__ == "__main__":
                     d[algo.CLASS_NAME].append(model.history['error'])
                     lrs[(i, j, exp_num, algo.CLASS_NAME)] = lr
                     times[(i, j, exp_num, algo.CLASS_NAME)] = model.history['time']
-                    logging.info(f"M{i + 1}, {entropy_names[j]} entropy, experiment {exp_num + 1}/{many_experiments}, "
+                    logging.info(f"M{i + 1}, {ENTROPIES[j]} entropy, experiment {exp_num + 1}/{many_experiments}, "
                                  f"{algo.CLASS_NAME}: final error {model.history['error'][-1]:.4e}, learning rate "
                                  f"{'/'.join(f'{v:g}' for v in np.atleast_1d(lr))}, training "
                                  f"{model.history['time']:.1f} s ({1e6 * model.history['time'] / (n * epochs):.2f} "
@@ -128,8 +164,15 @@ if __name__ == "__main__":
             if args.output:
                 save_curves(args.output, curves, lrs, times, labels, n)
 
+    # The figure shows all the manifolds and entropies of the output, with those of previous runs
+    if args.output:
+        with np.load(args.output + '.npz') as z:
+            cells = {(i, j): z[f'curves_{i}_{j}'] for i in range(3) for j in range(3) if f'curves_{i}_{j}' in z.files}
+    else:
+        cells = {cell: np.array([d[label] for label in labels]) for cell, d in curves.items()}
+    missing = np.full(next(iter(cells.values())).shape, np.nan)
     # (manifold, entropy, algorithm, experiment, checkpoint)
-    errors = np.array([[[curves[(i, j)][label] for label in labels] for j in range(3)] for i in range(3)])
+    errors = np.array([[cells.get((i, j), missing) for j in range(3)] for i in range(3)])
     gr = np.median(errors, axis=3)
     up = np.percentile(errors, q=75, axis=3)
     dn = np.percentile(errors, q=25, axis=3)

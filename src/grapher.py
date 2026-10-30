@@ -10,6 +10,8 @@ def plot_lines(x, graphs, labels, x_labels=False, y_labels=False, low_lines=None
     rows = len(graphs)
     columns = len(graphs[0])
     grid_num = rows*100 + columns*10 + 1
+    # Each algorithm is labeled in the first subplot where it is drawn
+    labeled = set()
     # plt.figure(figsize=(14, 3.9))
     for row in range(rows):
         for col in range(columns):
@@ -37,11 +39,12 @@ def plot_lines(x, graphs, labels, x_labels=False, y_labels=False, low_lines=None
                 name = labels[l]
                 if (line > 0).all():
                     plt.semilogy()
-                    plt.plot(x, line, label=name if col + row == 0 else "", color=color[name],
+                    plt.plot(x, line, label=name if name not in labeled else "", color=color[name],
                              linestyle=linestyles[name])
+                    labeled.add(name)
                     # uncomment below line to fill quartiles
                     plt.fill_between(x, l_line, h_line, facecolor=color[name], alpha=0.35)
-            plt.figlegend(loc=8, ncol=len(labels))
+    plt.figlegend(loc=8, ncol=len(labels))
     if file_name:
         try:
             f = file_name + '.png'
