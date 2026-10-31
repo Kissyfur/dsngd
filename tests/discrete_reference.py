@@ -22,7 +22,7 @@ GOLDEN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', '
 
 # Outputs whose floating point sums are done in another order than in the original implementation (to_dual, the KL
 # metric, the directions computed for all the features at once and the fits) are compared with a tolerance; the rest,
-# including the samples, the prior and the selected learning rates, exactly.
+# including the samples and the prior, exactly.
 APPROXIMATE_KEYS = ('to_dual_alpha', 'to_dual_beta', 'sngd_alpha', 'sngd_beta', 'dsngd_alpha', 'dsngd_beta') + tuple(
     f'fit_{name}_{block}' for name in ('SGD', 'AdaGrad', 'DSNGD', 'SNGD') for block in ('alpha', 'beta'))
 APPROXIMATE_SUFFIX = '_error'
@@ -58,7 +58,6 @@ def compute():
     np.random.seed(0)
     problem.set_random_eta(0.7)
     sample = JointMLRSampleIterator(problem, 25000, 1, 250, random_seed=0)
-    sample_lr = JointMLRSampleIterator(problem, 2500, 1, 250, random_seed=1)
     for algo_class, lr in ((SGD_JointMLR, (0.1, 0.01)), (AdaGrad_JointMLR, 0.1),
                            (DSNGD_JointMLR, (0.001, 0.1)), (SNGD_JointMLR, (0.001, 0.1))):
         model = JointMLR(10, [10, 5])
@@ -68,9 +67,6 @@ def compute():
         name = algo_class.CLASS_NAME
         out[f'fit_{name}_alpha'], out[f'fit_{name}_beta'] = model.eta
         out[f'fit_{name}_error'] = model.history['error']
-        if algo_class is not SNGD_JointMLR:
-            out[f'best_lr_{name}'] = np.asarray(JointMLR(10, [10, 5]).find_best_lr(problem, sample_lr, algo),
-                                                dtype=float)
     return out
 
 

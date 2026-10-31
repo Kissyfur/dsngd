@@ -3,12 +3,13 @@ import unittest
 import numpy as np
 from scipy.special import softmax
 
+from src.algorithms import LineSearch
 from src.algorithms.adaGrad import AdaGrad_JointMLR
 from src.algorithms.dsngd import DSNGD_JointMLR
 from src.algorithms.sgd import SGD_JointMLR
 from src.algorithms.sngd import SNGD_JointMLR
 from src.data.sample_creator import JointMLRSampleIterator
-from src.model.joint_mlr import JointMLR
+from src.model.joint_mlr import BASE_RATE_CANDIDATES, STEP_CANDIDATES, JointMLR
 from src.model.statistic import (BetaStatistic, DirichletStatistic, ExponentialStatistic, GammaStatistic,
                                  GaussianMeanVarianceStatistic, GaussianStatistic, MultivariateGaussianStatistic,
                                  PoissonStatistic)
@@ -104,6 +105,73 @@ class JointMLRContinuousTests(unittest.TestCase):
                 error = model.history['error']
                 self.assertTrue(np.all(np.isfinite(error)))
                 self.assertLess(error[-1], 0.5 * error[0])
+
+
+class ScriptedOptimizer:
+    """Optimizer whose error after a sample is given by error(length of the sample, learning rate)."""
+
+    def __init__(self, error, single_learning_rate_parameter=False):
+        self.error = error
+        self.single_learning_rate_parameter = single_learning_rate_parameter
+        self.runs = []
+
+    def run(self, sample, starting_point, lr, iter_keep):
+        self.runs.append((len(sample), lr))
+        return [self.error(len(sample), lr)]
+
+
+class LearningRateSearchTests(unittest.TestCase):
+    batches = [(None, np.zeros(250))] * 1600
+
+    def search(self, optimizer):
+        return JointMLR(3, [2]).find_best_lr(None, self.batches, optimizer, metric=np.array, verbose=False)
+
+    def test_candidates_give_the_step_of_an_observation(self):
+        optimizer = ScriptedOptimizer(lambda length, lr: 1.)
+        self.search(optimizer)
+        self.assertEqual(len(STEP_CANDIDATES), 16)
+        for (C, N0), (_, lr) in zip(STEP_CANDIDATES, optimizer.runs):
+            for i in (0, 7, 1000):
+                self.assertAlmostEqual(LineSearch.regular_learning_rate(i, lr) * (N0 + 250 * i) / C, 1.)
+
+    def test_each_round_keeps_the_best_half_on_a_prefix_twice_as_long(self):
+        # The candidates are ranked by their position, and on the whole sample the order is reversed
+        rank = {(C / N0, 250 / N0): position for position, (C, N0) in enumerate(STEP_CANDIDATES)}
+        optimizer = ScriptedOptimizer(lambda length, lr: rank[tuple(lr)] * (-1. if length == 1600 else 1.))
+        best = self.search(optimizer)
+        self.assertEqual([length for length, _ in optimizer.runs], [200] * 16 + [400] * 8 + [800] * 4 + [1600] * 2)
+        for start, kept in ((16, 8), (24, 4), (28, 2)):
+            self.assertEqual(sorted(rank[tuple(lr)] for _, lr in optimizer.runs[start:start + kept]), list(range(kept)))
+        self.assertEqual(rank[tuple(best)], 1)
+
+    def test_algorithms_with_a_single_rate_search_their_base_rates(self):
+        optimizer = ScriptedOptimizer(lambda length, lr: abs(lr - 0.05), single_learning_rate_parameter=True)
+        self.assertEqual(self.search(optimizer), 0.05)
+        self.assertEqual([length for length, _ in optimizer.runs], [400] * 6 + [800] * 3 + [1600] * 2)
+        self.assertEqual([lr for _, lr in optimizer.runs[:6]], BASE_RATE_CANDIDATES)
+
+    def test_learning_rates_that_diverge_are_discarded(self):
+        def error(length, lr):
+            if lr >= 0.1:
+                raise FloatingPointError
+            if lr >= 0.05:
+                return np.nan
+            return np.inf if lr == 0.02 else 1. / lr
+
+        self.assertEqual(self.search(ScriptedOptimizer(error, single_learning_rate_parameter=True)), 0.01)
+
+    def test_search_of_the_algorithms_on_a_short_sample(self):
+        problem = random_model(3, [2, 3], 0.7, seed=13)
+        problem.set_pyx()
+        sample = JointMLRSampleIterator(problem, 1000, 1, 100, random_seed=14)
+        for algo_class in (SGD_JointMLR, AdaGrad_JointMLR, DSNGD_JointMLR):
+            with self.subTest(algorithm=algo_class.CLASS_NAME):
+                model = JointMLR(3, [2, 3])
+                lr = model.find_best_lr(problem, sample, algo_class(model), verbose=False)
+                if algo_class is AdaGrad_JointMLR:
+                    self.assertIn(lr, BASE_RATE_CANDIDATES)
+                else:
+                    self.assertIn((round(lr[0] / lr[1] * 100), round(100 / lr[1])), STEP_CANDIDATES)
 
 
 if __name__ == '__main__':

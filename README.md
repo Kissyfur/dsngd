@@ -96,9 +96,15 @@ curves replace those of the same manifolds and entropies in the output, the othe
 all. The output must then hold the same algorithms, number of experiments (`--experiments`) and length of the training
 sample (`--n`). Each experiment draws its problem and samples from seeds given by its number, so a manifold and entropy
 run alone gives the same results as in a run of all of them.
+
+The learning rates are chosen by successive halving (`find_best_lr`): all the candidates run on an eighth of the search
+sample, the best half on a quarter and so on, each one from the start, until the last two run on the whole sample
+(`--n-lr`, 500,000 observations on synthetic data and Covertype and 200,000 on MNIST). AdaGrad has 6 base rates, so its
+first round uses a quarter of the sample. SGD and DSNGD share 16 steps C / (N0 + N) of an observation after N
+observations, which the code gives as the rate a / (1 + b i) of batch i, with a = C / N0 and b = batch / N0.
+
 The real data experiments use Covertype and MNIST, downloaded to `saved_data/`, with `--features` choosing the model
-of the features, and the learning rate search starts at initial rates of 10^-7 (`--min-lr-exponent`) instead of the
-10^-4 of the synthetic experiments, since the best rates of DSNGD are smaller on these data. For Covertype, `natural` gives each variable a family according to its nature (Gaussian for elevation
+of the features. For Covertype, `natural` gives each variable a family according to its nature (Gaussian for elevation
 and vertical distance, von Mises for the aspect, Gamma for the slope and the distances, Beta for the hillshade indices
 and categorical for wilderness area and soil type) and `gaussian` uses Gaussians for all the continuous variables. For
 MNIST, `levels` models each pixel as a categorical variable with 13 intensity levels (59,169 parameters, as LeNet-5,

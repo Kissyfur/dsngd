@@ -12,6 +12,12 @@ logging.basicConfig(level=logging.INFO)
 
 # Seed of the Monte Carlo sample of x used as support of p(x, y) when features are continuous
 SUPPORT_SEED = 2 ** 31 - 1
+# Learning rate candidates: pairs (C, N0) of the step C / (N0 + N) of an observation after N observations, and base rates
+# of the algorithms with a single learning rate parameter
+STEP_CANDIDATES = [(1, 250), (1, 2500), (1, 25000), (2, 5000), (2, 500000), (25, 2500), (25, 25000), (25, 62500),
+                   (25, 250000), (50, 1250), (100, 2500), (200, 5000), (250, 2500), (250, 25000), (2500, 25000),
+                   (2500, 2500000)]
+BASE_RATE_CANDIDATES = [0.005, 0.01, 0.02, 0.05, 0.1, 0.2]
 
 
 class JointMLR:
@@ -131,36 +137,37 @@ class JointMLR:
         beta_dual = self.T.expectation(eta[1]) * alpha_dual
         return alpha_dual, beta_dual
 
-    def find_best_lr(self, true_model, sample, optimizer: LineSearch, metric=None, min_exponent=-4, verbose=True):
-        # metric(etas) gives the error of each eta, by default the KL divergence to true_model
+    def find_best_lr(self, true_model, sample, optimizer: LineSearch, metric=None, verbose=True):
+        # Successive halving: all the candidates run on a prefix of the sample, the best half on a prefix twice as long
+        # and so on, each one from the start, until the last two run on the whole sample. metric(etas) gives the error
+        # of each eta, by default the KL divergence to true_model
         if metric is None:
             metric = lambda etas: self.compute_metrics(true_model, etas)
-        exp = np.power(10., np.arange(-4, 2))
-        # Initial rates a (or the single rate) from 10^min_exponent, decays b in exp
-        rates = np.power(10., np.arange(min_exponent, 2))
-        lrs = list(itertools.product(rates, exp))
-        best_lr = np.array([1., 1.])
-
+        sample = list(sample)
         if optimizer.single_learning_rate_parameter:
-            lrs = list(itertools.product(rates))
-            best_lr = 1.
+            lrs = BASE_RATE_CANDIDATES
+        else:
+            # The rate a / (1 + b * i) of batch i is the step C / (N0 + N) with N = i * batch
+            batch = len(sample[0][1])
+            lrs = [np.array([C / N0, batch / N0]) for C, N0 in STEP_CANDIDATES]
 
-        etas = optimizer.run(sample, starting_point=(self.alpha.copy(), self.beta.copy()), lr=best_lr, iter_keep=100)
-        best_err = np.sum(metric(etas[-5:]))
+        errors = []
+        for halvings_left in reversed(range(int(np.ceil(np.log2(len(lrs)))))):
+            prefix = sample[:len(sample) // 2 ** halvings_left]
+            errors = [self.lr_error(prefix, optimizer, lr, metric)
+                      for lr in tqdm(lrs, desc="Learning rate search...", disable=not verbose)]
+            lrs = [lrs[i] for i in np.argsort(errors, kind='stable')[:int(np.ceil(len(lrs) / 2))]]
+        logging.debug(f"Best learning rate: {lrs[0]} with error: {min(errors)} ")
+        return lrs[0]
 
-        for lr in tqdm(lrs, desc="Learning rate search...", disable=not verbose):
-            try:
-                etas = optimizer.run(sample, starting_point=(self.alpha.copy(), self.beta.copy()), lr=lr, iter_keep=100)
-                err = np.sum(metric(etas[-5:]))
-                # logging.info(f"Learning rate: {lr} with error: {err} ")
-
-                if err < best_err or np.isnan(best_err):
-                    best_lr = lr
-                    best_err = err
-            except (OverflowError, np.linalg.LinAlgError, FloatingPointError):
-                pass
-        logging.debug(f"Best learning rate: {best_lr} with error: {best_err} ")
-        return best_lr
+    def lr_error(self, sample, optimizer: LineSearch, lr, metric):
+        # Error after the sample, infinite for a learning rate that diverges
+        try:
+            etas = optimizer.run(sample, starting_point=(self.alpha.copy(), self.beta.copy()), lr=lr, iter_keep=100)
+            err = np.sum(metric(etas[-5:]))
+        except (OverflowError, ValueError, np.linalg.LinAlgError, FloatingPointError):
+            return np.inf
+        return err if np.isfinite(err) else np.inf
 
     def fit(self, sample, optimizer: LineSearch, lr, verbose=False, iter_keep=100):
         n = len(sample)

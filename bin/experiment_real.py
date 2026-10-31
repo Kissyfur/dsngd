@@ -1,4 +1,5 @@
 import argparse
+import itertools
 import logging
 import matplotlib
 
@@ -23,8 +24,8 @@ logging.basicConfig(level=logging.INFO)
 
 ALGORITHMS = {algo_class.CLASS_NAME: algo_class
               for algo_class in [SGD_JointMLR, AdaGrad_JointMLR, DSNGD_JointMLR, SNGD_JointMLR]}
-DEFAULTS = {'covertype': {'epochs': 3, 'n_lr': 500 * 250, 'features': 'natural'},
-            'mnist': {'epochs': 20, 'n_lr': 100 * 250, 'features': 'levels'}}
+DEFAULTS = {'covertype': {'epochs': 3, 'n_lr': 2000 * 250, 'features': 'natural'},
+            'mnist': {'epochs': 20, 'n_lr': 800 * 250, 'features': 'levels'}}
 FEATURES = {'covertype': ['natural', 'gaussian'], 'mnist': ['levels', 'bernoulli', 'gaussian']}
 # Known results of other models, drawn on the accuracy plot. Trained without distortions, the test error of LeNet-5
 # (about 60,000 parameters) stabilizes at 0.95% after about 10 of its 20 passes through the training set
@@ -79,8 +80,6 @@ def parse_args():
     parser.add_argument('--levels', type=int, default=13, help='Intensity levels of the pixels with --features levels')
     parser.add_argument('--epochs', type=int, help='Epochs over the training set')
     parser.add_argument('--n-lr', type=int, help='Training observations used in the learning rate search')
-    parser.add_argument('--min-lr-exponent', type=int, default=-7,
-                        help='Smallest initial learning rate of the search, as a power of 10 (-4 on synthetic data)')
     parser.add_argument('--max-train', type=int, help='Use only this many training observations')
     parser.add_argument('--seeds', type=int, default=5, help='Repetitions with different orders of the data')
     parser.add_argument('--algorithms', nargs='+', choices=list(ALGORITHMS), default=['SGD', 'AdaGrad', 'DSNGD'])
@@ -162,13 +161,14 @@ if __name__ == '__main__':
     results = {name: {'log_loss': [], 'accuracy': [], 'lr': [], 'time': []} for name in args.algorithms}
     for seed in range(args.seeds):
         sample = ArraySampleIterator(x_fit, y_fit, epochs=epochs, batch=batch, random_seed=seed)
-        sample_lr = ArraySampleIterator(x_fit, y_fit, epochs=1, batch=batch, random_seed=seed, epoch_length=n_lr)
+        # The first batches of the training order, which may take several epochs
+        sample_lr = list(itertools.islice(sample, n_lr // batch))
         for name in args.algorithms:
             model = JointMLR(s, features)
             algo = ALGORITHMS[name](model)
             lr = model.find_best_lr(None, sample_lr, algo,
                                     metric=lambda etas: model.log_loss(None, y_val, etas, tx_val),
-                                    min_exponent=args.min_lr_exponent, verbose=not args.quiet)
+                                    verbose=not args.quiet)
             model.fit(sample, algo, lr=lr, verbose=not args.quiet)
             log_loss, accuracy = evaluate(model, tx_test, y_test, model.history['etas'])
             results[name]['log_loss'].append(log_loss)

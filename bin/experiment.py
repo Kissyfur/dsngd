@@ -58,7 +58,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Compare the algorithms on the manifolds M1, M2 and M3.')
     parser.add_argument('--features', choices=['discrete'] + list(FAMILIES) + list(BLOCKS), default='discrete')
     parser.add_argument('--n', type=int, default=10000000, help='Length of the training sample')
-    parser.add_argument('--n-lr', type=int, default=500 * 250, help='Length of the learning rate search sample')
+    parser.add_argument('--n-lr', type=int, default=2000 * 250, help='Length of the learning rate search sample')
     parser.add_argument('--experiments', type=int, default=1, help='Experiments per manifold and entropy')
     parser.add_argument('--support-size', type=int, default=100000,
                         help='Monte Carlo sample of x used to compute the KL divergence for continuous features')
