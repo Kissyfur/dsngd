@@ -27,9 +27,10 @@ class Statistic:
         return dual[:self.dim] / alpha_dual
 
     def dsngd_block(self, theta_star, m, a):
-        # Theorem 3.2 for the features of a group: the block H(theta*) (M - a theta*) of the direction, and its inner
-        # products with theta* summed over the features. m holds the weighted sums of identity, whose first dim
-        # components belong to the statistic. Families whose product by H simplifies override it.
+        # Theorem 3.2 for the features of a group, summed over the mini-batch (Remark 4.12): the block
+        # H(theta*) (M - a theta*) of the direction, and its inner products with theta* summed over the features. m
+        # holds the weighted sums of identity, whose first dim components belong to the statistic. Families whose
+        # product by H simplifies override it.
         block = self.dual_hessian_product(theta_star, m[:self.dim] - theta_star * a)
         return block, np.sum(theta_star * block, axis=(0, 1))
 
@@ -95,7 +96,7 @@ class CanonicalStatistic(Statistic):
         return dual / alpha_dual
 
     def dsngd_block(self, probabilities, m, a):
-        # Theorem 3.2 simplified as in Proposition 3.3. With N_v the weighted counts of the values and p_v their
+        # Proposition 3.3 summed over the mini-batch. With N_v the weighted counts of the values and p_v their
         # probabilities, H(theta*) (M - a theta*) = N_i / p_i - N_m / p_m, whose inner product with theta* is
         # a - N_m / p_m, so no product by H is needed
         ratios = m / probabilities

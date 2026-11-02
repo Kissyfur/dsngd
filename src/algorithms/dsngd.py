@@ -21,12 +21,12 @@ class DSNGD_JointMLR(LineSearch):
 
     def aprox_natural_gradient_log_conditional_probability(self, sample, eta, dual_parameter, identity=None,
                                                           points=None):
-        # Theorem 3.2. The rescaled residuals w = D_Y(zeta*) q, their sum a and the sums M of identity(x) weighted by w,
-        # which hold T(x)^T w and the weighted counts of all the values of the categorical features, come from one
-        # product for all the features. Each family computes the blocks H(theta*) (M - a theta*) of its features
-        # together from their auxiliary point, and c = a - sum of <theta*, block>. identity is the statistic of x
-        # accumulated by the dual parameter, if already computed, and points the auxiliary points of the groups of
-        # features, computed from the dual parameter if not given.
+        # Theorem 3.2 summed over the mini-batch (Remark 4.12). The rescaled residuals w = D_Y(zeta*) q, their sum a
+        # and the sums M of identity(x) weighted by w, which hold T(x)^T w and the weighted counts of all the values of
+        # the categorical features, come from one product for all the features. Each family computes the blocks
+        # H(theta*) (M - a theta*) of its features together from their auxiliary point, and c = a - sum of
+        # <theta*, block>. identity is the statistic of x accumulated by the dual parameter, if already computed, and
+        # points the auxiliary points of the groups of features, computed from the dual parameter if not given.
         x, y = sample
         alpha_dual = dual_parameter[0]
         identity = self.model.T.identity(x) if identity is None else identity

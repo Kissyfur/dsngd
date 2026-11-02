@@ -119,7 +119,7 @@ class CanonicalStatisticTests(unittest.TestCase):
                                    atol=1e-12)
 
     def test_block_of_the_direction_without_products_by_the_hessian(self):
-        # The categorical block N_i / p_i - N_m / p_m (Proposition 3.3) is H(theta*) (M - a theta*) (Theorem 3.2)
+        # Proposition 3.3 summed over a mini-batch, N_i / p_i - N_m / p_m, is H(theta*) (M - a theta*) (Remark 4.12)
         rng = np.random.default_rng(5)
         statistic = CanonicalStatistic(4)
         alpha_dual = rng.uniform(5., 10., size=3)
