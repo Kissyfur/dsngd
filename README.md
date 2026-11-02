@@ -138,3 +138,8 @@ EXPERIMENTS=10 MANIFOLDS=2 ENTROPIES=high bin/run_experiments.sh python syntheti
 ```
 
 Run the tests with `python -m unittest discover -s tests`.
+
+## License
+
+The code is released under the MIT license (see `LICENSE`). If you use it in your research, please cite it as
+given in `CITATION.cff`.
