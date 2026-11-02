@@ -4,6 +4,10 @@ linestyles = {'SGD': '-', 'SNGD': ':', 'DSNGD': '--', 'MAP': '-.', 'adaGrad': '-
 
 color = {'SGD': 'C1', 'SNGD': 'C3', 'DSNGD': 'C2', 'MAP': 'C3', 'adaGrad': 'C5', 'AdaGrad': 'C5'}
 
+# Known results of other models, drawn on the accuracy plot. Trained without distortions, the test error of LeNet-5
+# (about 60,000 parameters) stabilizes at 0.95% after about 10 of its 20 passes through the training set
+# (LeCun et al., Gradient-based learning applied to document recognition, Proc. IEEE 86(11), 1998).
+REFERENCES = {'mnist': [{'label': 'LeNet-5 (LeCun et al., 1998)', 'accuracy': 1. - 0.0095, 'epochs': 10}]}
 
 
 def plot_lines(x, graphs, labels, x_labels=False, y_labels=False, low_lines=None, high_lines=None, file_name=''):

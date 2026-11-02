@@ -16,7 +16,7 @@ from src.algorithms.sgd import SGD_JointMLR
 from src.algorithms.dsngd import DSNGD_JointMLR
 from src.algorithms.sngd import SNGD_JointMLR
 from src.algorithms.adaGrad import AdaGrad_JointMLR
-from src.grapher import color, linestyles
+from src.grapher import REFERENCES, color, linestyles
 from src.progress import Progress
 
 
@@ -27,10 +27,6 @@ ALGORITHMS = {algo_class.CLASS_NAME: algo_class
 DEFAULTS = {'covertype': {'epochs': 3, 'n_lr': 2000 * 250, 'features': 'natural'},
             'mnist': {'epochs': 20, 'n_lr': 800 * 250, 'features': 'levels'}}
 FEATURES = {'covertype': ['natural', 'gaussian'], 'mnist': ['levels', 'bernoulli', 'gaussian']}
-# Known results of other models, drawn on the accuracy plot. Trained without distortions, the test error of LeNet-5
-# (about 60,000 parameters) stabilizes at 0.95% after about 10 of its 20 passes through the training set
-# (LeCun et al., Gradient-based learning applied to document recognition, Proc. IEEE 86(11), 1998).
-REFERENCES = {'mnist': [{'label': 'LeNet-5 (LeCun et al., 1998)', 'accuracy': 1. - 0.0095, 'epochs': 10}]}
 
 
 def load(dataset, features, levels):

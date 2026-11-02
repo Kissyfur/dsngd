@@ -121,12 +121,13 @@ only one part, and further arguments only the given experiments, such as `gaussi
 and `ENTROPIES` run only some manifolds and entropies of the synthetic experiments, as `--manifolds` and `--entropies`,
 with a log of their own. Each experiment writes one log line per training, with its result, the elapsed time and the
 expected remaining time. `bin/summarize.py` prints the final errors, LaTeX rows for the tables of real data and
-computational time, and copies the figures to `manuscript/figures`:
+computational time, copies the figures to `manuscript/figures` and draws there the two figures that group the
+synthetic results of the families and the real data models of the appendices:
 
 ```bash
 JOBS=6 EXPERIMENTS=10 bin/run_experiments.sh python synthetic
 tail -n 1 outputs/synthetic/*.log
-python bin/summarize.py
+PYTHONPATH=. python bin/summarize.py
 ```
 
 For instance, to run again M2 with high entropy for the Gaussian features, and then for all the synthetic experiments:
